@@ -60,7 +60,6 @@ def _run_audit(
     opencode_session: str | None = None,
 ) -> AuditReport:
     """Run full audit pipeline on a single session."""
-    # Import extractors lazily (tiktoken may not be installed in all envs)
     if source_type == "claude":
         from archolith_mcp_audit.extractors.claude import extract_session
         session = extract_session(source_path, max_results=max_results)
@@ -97,20 +96,42 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-results", type=int, help="Max tool results per session")
     parser.add_argument("--compare", nargs=2, metavar=("BEFORE", "AFTER"),
                         help="Compare two JSON audit reports")
+    parser.add_argument("--refresh-schemas", action="store_true",
+                        help="Refresh MCP tool schema catalog")
+    parser.add_argument("--ci", action="store_true",
+                        help="CI mode: exit 2 if thresholds exceeded")
+    parser.add_argument("--max-server-share", type=float, default=20.0,
+                        help="CI: max per-server token share %% (default: 20)")
+    parser.add_argument("--max-total-mcp-share", type=float, default=40.0,
+                        help="CI: max total MCP share %% (default: 40)")
+    parser.add_argument("--max-waste-pct", type=float, default=50.0,
+                        help="CI: max waste %% per server (default: 50)")
     args = parser.parse_args(argv)
 
     # Load server mapping
     server_mapping = _load_mapping()
 
+    # Schema refresh mode
+    if args.refresh_schemas:
+        from archolith_mcp_audit.schema_estimator import refresh_schema_catalog
+        catalog = refresh_schema_catalog()
+        servers = list(catalog.keys()) if catalog else []
+        print(f"Schema catalog refreshed. {len(servers)} servers: {', '.join(servers) if servers else 'none'}")
+        return 0
+
     # Comparison mode
     if args.compare:
+        from archolith_mcp_audit.comparator import compare_reports, format_delta_report
         before_path, after_path = args.compare
         with open(before_path, encoding="utf-8") as f:
             before = json.load(f)
         with open(after_path, encoding="utf-8") as f:
             after = json.load(f)
-        _print_comparison(before, after)
-        return 0
+        deltas = compare_reports(before, after)
+        print(format_delta_report(deltas))
+        # Exit 2 if any server regressed
+        has_regression = any(d.status == "regressed" for d in deltas)
+        return 2 if has_regression else 0
 
     sources = _resolve_sources(args)
     if not sources:
@@ -147,6 +168,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # Output
     for report in all_reports:
+        if args.ci:
+            # CI mode: run threshold checks instead of report
+            from archolith_mcp_audit.ci import run_ci_check
+            return run_ci_check(
+                report,
+                max_server_share=args.max_server_share,
+                max_total_mcp_share=args.max_total_mcp_share,
+                max_waste_pct=args.max_waste_pct,
+            )
+
         if args.format == "report":
             print(format_report_text(report))
         elif args.format == "json":
@@ -154,54 +185,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.format == "markdown":
             print(format_report_markdown(report))
 
-    # Exit code: 2 if critical waste detected
+    # Exit code: 2 if critical waste detected (non-CI mode)
     has_critical = any(
         any(f.severity == "critical" for sr in report.servers.values() for f in sr.findings)
         for report in all_reports
     )
     return 2 if has_critical else 0
-
-
-def _print_comparison(before: dict, after: dict) -> None:
-    """Print a delta report comparing two JSON audit reports."""
-    print("MCP AUDIT COMPARISON")
-    print("=" * 60)
-
-    for server in set(list(before.get("servers", {}).keys()) + list(after.get("servers", {}).keys())):
-        b = before.get("servers", {}).get(server, {})
-        a = after.get("servers", {}).get(server, {})
-
-        b_tokens = b.get("token_share", 0)
-        a_tokens = a.get("token_share", 0)
-        b_waste = sum(f.get("tokens_wasted", 0) for f in b.get("findings", []))
-        a_waste = sum(f.get("tokens_wasted", 0) for f in a.get("findings", []))
-
-        token_change = a_tokens - b_tokens
-        waste_change = a_waste - b_waste
-
-        print(f"\n--- {server} ---")
-        print(f"Before: {b.get('call_count', 0)} calls, {b_tokens:,} tokens, {b_waste:,} wasted")
-        print(f"After:  {a.get('call_count', 0)} calls, {a_tokens:,} tokens, {a_waste:,} wasted")
-
-        if b_tokens > 0:
-            print(f"Change: {token_change:+,} tokens ({token_change / b_tokens * 100:+.1f}%), "
-                  f"{waste_change:+,} waste")
-        else:
-            print(f"Change: {token_change:+,} tokens, {waste_change:+,} waste")
-
-        # Regression detection
-        a_types = {f.get("waste_type") for f in a.get("findings", [])}
-        b_types = {f.get("waste_type") for f in b.get("findings", [])}
-        new_waste = a_types - b_types
-        if new_waste:
-            print(f"  WARNING: New waste types introduced: {', '.join(new_waste)}")
-
-        if waste_change < 0:
-            print("  Status: Optimization effective")
-        elif waste_change > 0:
-            print("  Status: REGRESSION — waste increased")
-        else:
-            print("  Status: No change")
 
 
 if __name__ == "__main__":

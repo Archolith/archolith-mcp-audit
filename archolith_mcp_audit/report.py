@@ -39,6 +39,7 @@ class AuditReport:
     top_optimizations: list[WasteFinding] = field(default_factory=list)
     total_recoverable_tokens: int = 0
     total_recoverable_pct: float = 0.0
+    schema_tokens_wasted: int = 0  # Schema cost is per-turn overhead, separate from result waste
     total_results: int = 0
 
 
@@ -90,11 +91,16 @@ def build_report(
             estimated_recoverable_tokens=recoverable,
         )
 
-    # Top optimizations across all servers
-    all_findings_sorted = sorted(findings, key=lambda f: -f.tokens_wasted)
+    # Top optimizations across all servers (exclude schema — it's a different cost dimension)
+    result_findings = [f for f in findings if f.waste_type != "schema"]
+    all_findings_sorted = sorted(result_findings, key=lambda f: -f.tokens_wasted)
     top = all_findings_sorted[:5]
 
-    total_recoverable = sum(f.tokens_wasted for f in findings)
+    # Schema waste is per-turn overhead, tracked separately
+    schema_tokens_wasted = sum(f.tokens_wasted for f in findings if f.waste_type == "schema")
+
+    # Result waste only (not schema) for the recoverable percentage
+    total_recoverable = sum(f.tokens_wasted for f in result_findings)
     total_recoverable_pct = (total_recoverable / total_tokens * 100) if total_tokens > 0 else 0
 
     return AuditReport(
@@ -109,6 +115,7 @@ def build_report(
         top_optimizations=top,
         total_recoverable_tokens=total_recoverable,
         total_recoverable_pct=total_recoverable_pct,
+        schema_tokens_wasted=schema_tokens_wasted,
         total_results=len(session.tool_results),
     )
 
@@ -129,8 +136,11 @@ def format_report_text(report: AuditReport) -> str:
     lines.append(f"  Total tool result tokens:    {report.total_tokens:>10,} (cl100k estimate)")
     lines.append(f"  MCP server share:            {report.mcp_tokens:>10,} ({report.mcp_share_pct:.1f}%)")
     lines.append(f"  Non-MCP share:               {report.non_mcp_tokens:>10,} ({report.non_mcp_share_pct:.1f}%)")
-    lines.append(f"  Total waste detected:        {report.total_recoverable_tokens:>10,} "
-                 f"({report.total_recoverable_pct:.1f}% of total)")
+    lines.append(f"  Result waste detected:       {report.total_recoverable_tokens:>10,} "
+                 f"({report.total_recoverable_pct:.1f}% of result tokens)")
+    if report.schema_tokens_wasted > 0:
+        lines.append(f"  Schema overhead (est.):     {report.schema_tokens_wasted:>10,} "
+                     f"(per-turn cost x turns)")
     lines.append("")
 
     # Per-server report cards
@@ -202,6 +212,7 @@ def format_report_json(report: AuditReport) -> str:
         "top_optimizations": [],
         "total_recoverable_tokens": report.total_recoverable_tokens,
         "total_recoverable_pct": round(report.total_recoverable_pct, 1),
+        "schema_tokens_wasted": report.schema_tokens_wasted,
     }
 
     for server_name, sr in report.servers.items():
@@ -253,7 +264,9 @@ def format_report_markdown(report: AuditReport) -> str:
     lines.append(f"| Total tool result tokens | {report.total_tokens:,} |")
     lines.append(f"| MCP server share | {report.mcp_tokens:,} ({report.mcp_share_pct:.1f}%) |")
     lines.append(f"| Non-MCP share | {report.non_mcp_tokens:,} ({report.non_mcp_share_pct:.1f}%) |")
-    lines.append(f"| Total waste detected | {report.total_recoverable_tokens:,} ({report.total_recoverable_pct:.1f}%) |")
+    lines.append(f"| Result waste detected | {report.total_recoverable_tokens:,} ({report.total_recoverable_pct:.1f}%) |")
+    if report.schema_tokens_wasted > 0:
+        lines.append(f"| Schema overhead (est.) | {report.schema_tokens_wasted:,} (per-turn x turns) |")
     lines.append("")
 
     # Per-server tables
