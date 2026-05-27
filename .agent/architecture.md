@@ -1,0 +1,128 @@
+# archolith-mcp-audit — Architecture
+
+## Overview
+
+MCP token usage audit system. Scans LLM session logs (Claude JSONL, Codex JSONL, OpenCode SQLite), attributes tool results to their MCP server, measures token cost per server, detects waste patterns, and produces per-server report cards with concrete optimization suggestions.
+
+**Design principle**: This is a diagnostic tool, not a proxy. It measures and reports. It does NOT intercept, compress, or modify MCP traffic. The goal is to drive server-side fixes, not add a permanent middleware layer.
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Language | Python 3.11+ |
+| Tokenizer | tiktoken (cl100k_base + o200k_base) |
+| MCP Server | FastMCP 0.4+ |
+| CLI | argparse |
+| Testing | pytest 8+ |
+| Linting | ruff |
+
+## Data Flow
+
+```
+Session logs (JSONL / SQLite)
+        │
+        ▼
+┌──────────────────────┐
+│  Session Extractor    │  Per-source adapter produces SessionData
+│  (claude/codex/opencode)│
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│  Server Attributor    │  Tool name → MCP server mapping
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│  Token Counter        │  tiktoken per result (cl100k + o200k)
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│  Waste Detector       │  6 pattern detectors tag each result
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│  Report Generator     │  Per-server report cards (text/JSON/markdown)
+└──────────────────────┘
+```
+
+### In-Session Flow (MCP Server)
+
+```
+RTK filter_output() runs on each tool result
+        │
+        ├── Normal path: filtered result → model context
+        │
+        └── Audit side channel: reads from FilterTelemetryStore
+                │
+                ▼
+        ┌──────────────────────┐
+        │  Live Accumulator    │  In-memory per-session store
+        └──────────┬───────────┘
+                   │
+                   ▼
+           mcp_audit_summary()   — per-server token share table
+           mcp_audit_detail()    — deep dive on one server
+           mcp_audit_check()     — threshold pass/fail
+```
+
+The accumulator is passive — it reads RTK telemetry that already exists. No new pipeline stage, no interception, no overhead on the filter path.
+
+## Key Components
+
+| Module | Purpose |
+|--------|---------|
+| `cli.py` | Argparse CLI entry point |
+| `attributor.py` | Tool name → MCP server mapping (configurable) |
+| `tokenizer.py` | tiktoken integration for token counting |
+| `waste_detector.py` | 6 waste pattern detectors |
+| `report.py` | Report card generation (text, JSON, markdown) |
+| `schema_estimator.py` | MCP tool schema token cost in system prompt |
+| `comparator.py` | Before/after comparison mode |
+| `mcp_server.py` | In-session MCP audit tool (summary/detail/check) |
+| `accumulator.py` | Live per-session token accumulator (reads RTK telemetry) |
+| `extractors/base.py` | SessionData dataclass + shared interface |
+| `extractors/claude.py` | Claude JSONL extraction |
+| `extractors/codex.py` | Codex JSONL extraction |
+| `extractors/opencode.py` | OpenCode SQLite extraction |
+
+### Waste Detectors
+
+| Detector | Waste type | What it catches |
+|----------|-----------|-----------------|
+| Polling | `polling_waste` | Repeated calls with same args → unchanged result (e.g., gradle_job_status) |
+| Oversized | `oversized_envelope`, `oversized_help` | JSON envelopes, large help text |
+| Redundant fields | `redundant_fields`, `overbroad_query` | Overbroad JSON results, missing field filters |
+| Schema cost | `schema` | Tool schema token overhead in system prompt |
+| Format | `format_waste_json_table`, `format_waste_key_repetition` | JSON where CSV/key-value would be shorter |
+| Cache breaker | `cache_breaker` | Content that changes per-turn but is semantically identical |
+
+## Configuration / Environment Variables
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `MCP_AUDIT_SERVER_MAPPING` | Path to server mapping JSON | `data/server_mapping.json` |
+| `MCP_AUDIT_SCHEMA_CATALOG` | Path to schema catalog JSON | `data/schema_catalog.json` |
+| `MCP_AUDIT_MAX_SHARE` | CI: max per-server token share (%) | 20 |
+| `MCP_AUDIT_MAX_TOTAL_MCP` | CI: max total MCP share (%) | 40 |
+| `MCP_AUDIT_MAX_WASTE_PCT` | CI: max waste per server (%) | 50 |
+
+## External Dependencies
+
+| Dependency | Purpose | Required |
+|------------|---------|----------|
+| tiktoken | Token counting (OpenAI tokenizer proxy) | Yes (pip) |
+| FastMCP | MCP server for in-session audit | Yes (pip) |
+| archolith-rtk telemetry | FilterTelemetryStore for live accumulator | Optional (in-session mode only) |
+| Claude/Codex/OpenCode session logs | Session data to audit | Required for CLI mode |
+
+## Relationship to Other Archolith Projects
+
+| Project | Relationship |
+|---------|-------------|
+| archolith-rtk | Shares extraction patterns. RTK's FilterTelemetryStore feeds the live accumulator. Audit measures what RTK filters; RTK compresses what audit flags. |
+| archolith-context | Independent. Context engine does semantic decisions; audit does measurement. |
+| archolith.dev | Development tooling for the archolith family. |
