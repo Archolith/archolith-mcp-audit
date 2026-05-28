@@ -6,7 +6,9 @@ Exposes three tools:
   mcp_audit_check   — threshold pass/fail check
 
 The server maintains a LiveAccumulator that observes tool results
-as the session progresses.
+as the session progresses. Observations are fed via a TelemetryBridge
+that connects to RTK telemetry, file-based telemetry, or direct push
+from hook observers.
 
 Disabled by default to avoid adding ~200-300 tokens of schema overhead
 per turn. Set MCP_AUDIT_ENABLED=1 to enable.
@@ -26,10 +28,11 @@ except ImportError:
 
 from archolith_mcp_audit.accumulator import LiveAccumulator
 from archolith_mcp_audit.attributor import _load_mapping
+from archolith_mcp_audit.telemetry_bridge import TelemetryBridge
 
-
-# Module-level accumulator (singleton per process)
+# Module-level singletons (one per process)
 _accumulator: LiveAccumulator | None = None
+_bridge: TelemetryBridge | None = None
 
 
 def get_accumulator() -> LiveAccumulator:
@@ -39,6 +42,28 @@ def get_accumulator() -> LiveAccumulator:
         mapping = _load_mapping()
         _accumulator = LiveAccumulator(server_mapping=mapping)
     return _accumulator
+
+
+def get_bridge() -> TelemetryBridge:
+    """Get or create the telemetry bridge.
+
+    The bridge is connected to the accumulator and optionally to
+    external telemetry sources based on environment variables:
+      - MCP_AUDIT_RTK=1        — connect to RTK FilterTelemetryStore
+      - MCP_AUDIT_TELEMETRY_FILE — path to a JSONL telemetry file
+    """
+    global _bridge
+    if _bridge is None:
+        _bridge = TelemetryBridge(accumulator=get_accumulator())
+
+        if os.environ.get("MCP_AUDIT_RTK", "").lower() in ("1", "true", "yes"):
+            _bridge.connect_rtk()
+
+        telemetry_file = os.environ.get("MCP_AUDIT_TELEMETRY_FILE", "")
+        if telemetry_file:
+            _bridge.connect_file(Path(telemetry_file))
+
+    return _bridge
 
 
 if _HAS_FASTMCP:
@@ -84,7 +109,8 @@ if _HAS_FASTMCP:
             "archolith-audit",
             instructions="MCP token usage audit. Use mcp_audit_summary for a quick "
                          "overview, mcp_audit_detail for deep-dive on a server, "
-                         "mcp_audit_check for threshold pass/fail.",
+                         "mcp_audit_check for threshold pass/fail, "
+                         "mcp_audit_bridge_status for telemetry source status.",
         )
 
         @mcp.tool()
@@ -94,6 +120,8 @@ if _HAS_FASTMCP:
             Returns a compact table showing each MCP server's token share,
             call count, and compression savings. ~300 tokens.
             """
+            bridge = get_bridge()
+            bridge.sync()
             acc = get_accumulator()
             summary = acc.get_server_summary()
             mcp_share = acc.get_mcp_share()
@@ -126,6 +154,8 @@ if _HAS_FASTMCP:
 
             Returns waste findings and optimization suggestions. ~200-500 tokens.
             """
+            bridge = get_bridge()
+            bridge.sync()
             acc = get_accumulator()
             summary = acc.get_server_summary()
 
@@ -182,6 +212,8 @@ if _HAS_FASTMCP:
 
             Returns pass/fail for each threshold. ~50-100 tokens.
             """
+            bridge = get_bridge()
+            bridge.sync()
             acc = get_accumulator()
             summary = acc.get_server_summary()
             mcp_share = acc.get_mcp_share()
@@ -210,6 +242,22 @@ if _HAS_FASTMCP:
 
             results.append(f"\nResult: {overall}")
             return "\n".join(results)
+
+        @mcp.tool()
+        def mcp_audit_bridge_status() -> str:
+            """Show telemetry bridge connection status.
+
+            Returns the number of connected telemetry sources and
+            total synced observations. ~50 tokens.
+            """
+            bridge = get_bridge()
+            bridge.sync()
+            total = bridge.total_synced
+            sources = bridge.source_count()
+            active = bridge.active_source_count()
+
+            return (f"Telemetry bridge: {active}/{sources} sources active, "
+                    f"{total} observations synced")
 
         def run_server() -> None:
             """Start the MCP server."""

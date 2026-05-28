@@ -1,5 +1,13 @@
 # Changelog — archolith-audit
 
+## 2026-05-27 — Telemetry bridge and hook observers
+
+- Added `telemetry_bridge.py`: TelemetryBridge, RtkTelemetrySource, FileTelemetrySource, InMemoryTelemetrySource
+- Added `hook_observer.py`: HookObserver, ClaudeCodeHookObserver, CodexHookObserver, OpenCodeHookObserver
+- Updated `mcp_server.py`: integrated TelemetryBridge, added mcp_audit_bridge_status tool, added get_bridge()
+- Added `tests/test_telemetry_bridge.py` and `tests/test_hook_observer.py`
+- Updated architecture.md, data_models.md, code_conventions.md
+
 ## 2026-05-27 — Naming and doc pass
 
 - Renamed public product from `archolith-mcp-audit` to `archolith-audit` across all surfaces

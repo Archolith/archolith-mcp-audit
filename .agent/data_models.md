@@ -155,3 +155,49 @@ Before/after comparison.
 | Schema catalog | `data/schema_catalog.json` | Loaded by schema_estimator |
 | Session logs | External (Claude/Codex/OpenCode paths) | Read by extractors |
 | Live telemetry | In-memory (RTK FilterTelemetryStore) | Read by accumulator |
+| Telemetry file | JSONL (configurable path) | Read by FileTelemetrySource |
+
+## Telemetry Bridge Entities
+
+### TelemetryEntry
+
+A single telemetry observation from an external source.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tool_name` | `str` | Full tool name |
+| `raw_chars` | `int` | Raw character count |
+| `filtered_chars` | `int` | Filtered character count |
+| `timestamp` | `float` | Unix timestamp |
+| `session_id` | `str` | Session identifier |
+| `metadata` | `dict` | Additional metadata |
+
+### HookEvent
+
+A single hook event from an LLM platform.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `event_type` | `str` | "pre_tool_use", "post_tool_use", or "error" |
+| `tool_name` | `str` | Full tool name |
+| `raw_result` | `str` | Raw tool result text |
+| `filtered_result` | `str` | Filtered result text (if available) |
+| `timestamp` | `float` | Unix timestamp |
+| `session_id` | `str` | Session identifier |
+| `metadata` | `dict` | Additional metadata |
+
+### Telemetry Source Types
+
+| Source | Class | Description |
+|--------|-------|-------------|
+| RTK | `RtkTelemetrySource` | Reads from archolith-rtk FilterTelemetryStore |
+| File | `FileTelemetrySource` | Reads incremental JSONL observations |
+| In-Memory | `InMemoryTelemetrySource` | Programmatic push for in-process callbacks |
+
+### Hook Observer Types
+
+| Observer | Class | Platform |
+|----------|-------|----------|
+| Claude Code | `ClaudeCodeHookObserver` | Claude Code PreToolUse/PostToolUse hooks |
+| Codex | `CodexHookObserver` | Codex shell hook wrapper |
+| OpenCode | `OpenCodeHookObserver` | OpenCode event callback system |

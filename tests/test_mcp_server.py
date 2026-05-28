@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from archolith_mcp_audit.accumulator import LiveAccumulator
-from archolith_mcp_audit.mcp_server import get_accumulator
+from archolith_mcp_audit.mcp_server import get_accumulator, get_bridge
+from archolith_mcp_audit.telemetry_bridge import TelemetryBridge
 from archolith_mcp_audit.waste_detector import WasteFinding
 
 
@@ -20,6 +21,27 @@ class TestGetAccumulator:
         acc1 = get_accumulator()
         acc2 = get_accumulator()
         assert acc1 is acc2
+
+
+class TestGetBridge:
+    """Tests for telemetry bridge singleton."""
+
+    def test_returns_telemetry_bridge(self) -> None:
+        """get_bridge returns a TelemetryBridge instance."""
+        bridge = get_bridge()
+        assert isinstance(bridge, TelemetryBridge)
+
+    def test_bridge_connected_to_accumulator(self) -> None:
+        """Bridge's accumulator is the same singleton."""
+        bridge = get_bridge()
+        acc = get_accumulator()
+        assert bridge.accumulator is acc
+
+    def test_singleton(self) -> None:
+        """Repeated calls return same instance."""
+        bridge1 = get_bridge()
+        bridge2 = get_bridge()
+        assert bridge1 is bridge2
 
 
 class TestMcpAuditSummaryOutput:

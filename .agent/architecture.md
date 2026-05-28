@@ -49,7 +49,7 @@ Session logs (JSONL / SQLite)
 └──────────────────────┘
 ```
 
-### In-Session Flow (MCP Server)
+### In-Session Flow (MCP Server + Telemetry Bridge)
 
 ```
 RTK filter_output() runs on each tool result
@@ -60,16 +60,31 @@ RTK filter_output() runs on each tool result
                 │
                 ▼
         ┌──────────────────────┐
+        │  Telemetry Bridge    │  Connects telemetry sources to accumulator
+        │  (telemetry_bridge)   │  Sources: RTK, file, in-memory, direct push
+        └──────────┬───────────┘
+                   │
+                   ▼
+        ┌──────────────────────┐
+        │  Hook Observer       │  Platform-specific event listeners
+        │  (hook_observer)     │  Claude Code, Codex, OpenCode hooks
+        └──────────┬───────────┘
+                   │
+                   ▼
+        ┌──────────────────────┐
         │  Live Accumulator    │  In-memory per-session store
         └──────────┬───────────┘
                    │
                    ▼
-           mcp_audit_summary()   — per-server token share table
-           mcp_audit_detail()    — deep dive on one server
-           mcp_audit_check()     — threshold pass/fail
+           mcp_audit_summary()      — per-server token share table
+           mcp_audit_detail()       — deep dive on one server
+           mcp_audit_check()        — threshold pass/fail
+           mcp_audit_bridge_status() — telemetry source status
 ```
 
-The accumulator is passive — it reads RTK telemetry that already exists. No new pipeline stage, no interception, no overhead on the filter path.
+The accumulator is passive — it reads telemetry that already exists. No new pipeline stage, no interception, no overhead on the filter path.
+
+The TelemetryBridge provides a uniform interface for feeding observations from multiple backends into the accumulator. Hook observers are platform-specific listeners that convert LLM-platform events into observations.
 
 ## Key Components
 
@@ -82,8 +97,10 @@ The accumulator is passive — it reads RTK telemetry that already exists. No ne
 | `report.py` | Report card generation (text, JSON, markdown) |
 | `schema_estimator.py` | MCP tool schema token cost in system prompt |
 | `comparator.py` | Before/after comparison mode |
-| `mcp_server.py` | In-session MCP audit tool (summary/detail/check) |
+| `mcp_server.py` | In-session MCP audit tool (summary/detail/check/bridge_status) |
 | `accumulator.py` | Live per-session token accumulator (reads RTK telemetry) |
+| `telemetry_bridge.py` | Connects telemetry sources (RTK, file, in-memory) to accumulator |
+| `hook_observer.py` | Platform-specific hook observers (Claude Code, Codex, OpenCode) |
 | `extractors/base.py` | SessionData dataclass + shared interface |
 | `extractors/claude.py` | Claude JSONL extraction |
 | `extractors/codex.py` | Codex JSONL extraction |
@@ -109,6 +126,8 @@ The accumulator is passive — it reads RTK telemetry that already exists. No ne
 | `MCP_AUDIT_MAX_SHARE` | CI: max per-server token share (%) | 20 |
 | `MCP_AUDIT_MAX_TOTAL_MCP` | CI: max total MCP share (%) | 40 |
 | `MCP_AUDIT_MAX_WASTE_PCT` | CI: max waste per server (%) | 50 |
+| `MCP_AUDIT_RTK` | Connect to RTK FilterTelemetryStore | 0 (disabled) |
+| `MCP_AUDIT_TELEMETRY_FILE` | Path to JSONL telemetry file | (none) |
 
 ## External Dependencies
 

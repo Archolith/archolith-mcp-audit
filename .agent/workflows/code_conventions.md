@@ -33,6 +33,8 @@ archolith_mcp_audit/
 ├── comparator.py            # Before/after comparison
 ├── mcp_server.py            # In-session MCP audit tool
 ├── accumulator.py           # Live session accumulator
+├── telemetry_bridge.py      # Telemetry source connector (RTK, file, in-memory)
+├── hook_observer.py         # Platform-specific hook observers
 ├── data/
 │   ├── server_mapping.json  # Canonical server name mapping
 │   └── schema_catalog.json  # Cached tool schema sizes
