@@ -123,6 +123,7 @@ The accumulator is passive — it reads RTK telemetry that already exists. No ne
 
 | Project | Relationship |
 |---------|-------------|
-| archolith-rtk | Shares extraction patterns. RTK's FilterTelemetryStore feeds the live accumulator. Audit measures what RTK filters; RTK compresses what audit flags. |
-| archolith-context | Independent. Context engine does semantic decisions; audit does measurement. |
-| archolith.dev | Development tooling for the archolith family. |
+| archolith-filter (archolith-rtk) | Shares extraction patterns. archolith-filter's FilterTelemetryStore feeds the live accumulator. Audit measures what filter compresses; filter compresses what audit flags. |
+| archolith-proxy (archolith-context) | Audit is the L3 measurement layer; proxy is L4 session curation. Audit findings drive server-side fixes that reduce the token volume the proxy has to manage. |
+| archolith-memory | Independent. Memory handles cross-session knowledge; audit handles per-session token measurement. |
+| archolith.dev | Product site. Audit ships as a standalone product (Wave 2b). |

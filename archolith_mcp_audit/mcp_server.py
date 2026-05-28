@@ -81,7 +81,7 @@ if _HAS_FASTMCP:
 
     else:
         mcp = FastMCP(
-            "mcp-audit",
+            "archolith-audit",
             instructions="MCP token usage audit. Use mcp_audit_summary for a quick "
                          "overview, mcp_audit_detail for deep-dive on a server, "
                          "mcp_audit_check for threshold pass/fail.",
