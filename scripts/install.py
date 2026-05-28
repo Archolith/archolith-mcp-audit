@@ -262,7 +262,7 @@ def _register_claude_mcp_server() -> None:
     Register archolith-audit MCP server.
 
     Checks global .mcp.json first. If not found, writes a project-local
-    .mcp.json in the archolith-mcp-audit directory.
+    .mcp.json in the archolith-audit directory.
     """
     global_mcp = HOME / ".claude" / ".mcp.json"
     workspace_mcp = Path.cwd() / ".mcp.json"
