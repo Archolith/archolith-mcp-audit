@@ -174,6 +174,13 @@ class FileTelemetrySource:
                     # Fall back to raw char counts for older/fallback entries.
                     raw = obj.get("raw_tokens") or obj.get("raw_chars", 0)
                     filtered = obj.get("filtered_tokens") or obj.get("filtered_chars", 0)
+
+                    # Pre-passthrough entries (before the hook wrote filtered_chars=raw_chars)
+                    # had filtered_chars=0, meaning "no filter data" — not "compressed to zero".
+                    # Treat as passthrough so stale file entries don't produce false savings.
+                    if filtered == 0 and raw > 0 and not obj.get("raw_tokens"):
+                        filtered = raw
+
                     entries.append(TelemetryEntry(
                         tool_name=obj.get("tool_name", "unknown"),
                         raw_chars=raw,
