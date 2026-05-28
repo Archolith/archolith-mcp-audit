@@ -136,18 +136,21 @@ if _HAS_FASTMCP:
             if not summary:
                 return "No tool results observed yet in this session."
 
-            lines = ["MCP Token Usage (this session):", ""]
+            # Label: "tokens" when tiktoken data present, "chars" otherwise
+            unit = "tokens" if acc.total_raw_chars > 0 else "results"
+            lines = [f"MCP Token Usage (this session, {unit}):", ""]
             for server, data in summary.items():
                 savings_flag = ""
-                if data["savings_pct"] > 50:
-                    savings_flag = f"  high savings ({data['savings_pct']:.0f}%)"
+                if data["savings_pct"] > 0:
+                    savings_flag = f"  {data['savings_pct']:.0f}% filter savings"
                 lines.append(
                     f"  {server:<25s} {data['share_pct']:>5.1f}%  "
-                    f"{data['call_count']:>4} calls{savings_flag}"
+                    f"{data['call_count']:>4} calls  {data['raw_chars']:>6} {unit}{savings_flag}"
                 )
 
             lines.append("")
             lines.append(f"  Total MCP share: {mcp_share:.1f}%")
+            lines.append(f"  Total {unit}: {acc.total_raw_chars:,}")
             lines.append(f"  Total results: {acc.total_results}")
 
             return "\n".join(lines)

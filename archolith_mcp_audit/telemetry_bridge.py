@@ -170,13 +170,21 @@ class FileTelemetrySource:
                         log.warning("Invalid JSON in telemetry file: %s", line[:100])
                         continue
 
+                    # Prefer token counts when available (tiktoken-measured).
+                    # Fall back to raw char counts for older/fallback entries.
+                    raw = obj.get("raw_tokens") or obj.get("raw_chars", 0)
+                    filtered = obj.get("filtered_tokens") or obj.get("filtered_chars", 0)
                     entries.append(TelemetryEntry(
                         tool_name=obj.get("tool_name", "unknown"),
-                        raw_chars=obj.get("raw_chars", 0),
-                        filtered_chars=obj.get("filtered_chars", 0),
+                        raw_chars=raw,
+                        filtered_chars=filtered,
                         timestamp=obj.get("timestamp", 0.0),
                         session_id=obj.get("session_id", ""),
-                        metadata=obj.get("metadata", {}),
+                        metadata={
+                            **obj.get("metadata", {}),
+                            "token_based": bool(obj.get("raw_tokens")),
+                            "tiktoken_used": obj.get("tiktoken_used", False),
+                        },
                     ))
                 self._file_pos = f.tell()
         except OSError as e:
