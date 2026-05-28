@@ -144,8 +144,8 @@ def _write_json(path: Path, data: dict) -> None:
 def _copy_hook_shim(dest: Path) -> None:
     """Copy the standalone hook observer to the target location."""
     if not HOOK_SRC.exists():
-        # Fall back to inline copy for the Claude Code shim (already installed)
-        print(f"  NOTE: {HOOK_SRC} not found — hook shim must be installed manually.")
+        print(f"  ERROR: hook source not found: {HOOK_SRC}")
+        print("  Re-install the package with: pip install -e .")
         return
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(HOOK_SRC, dest)
@@ -197,32 +197,8 @@ def _ensure_sessions_dir() -> None:
 
 
 def _install_claude_hook_shim() -> None:
-    """Write the standalone hook observer to ~/.claude/hooks/."""
-    # Use the installed shim if present, otherwise generate inline
-    if HOOK_SRC.exists():
-        _copy_hook_shim(CLAUDE_HOOK_DEST)
-    else:
-        # Generate minimal inline version (no package imports)
-        _write_inline_hook_shim(CLAUDE_HOOK_DEST)
-
-
-def _write_inline_hook_shim(dest: Path) -> None:
-    """Write a minimal self-contained hook shim when standalone source isn't available."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    content = (PKG_ROOT / "archolith_mcp_audit" / ".." /
-               "scripts" / "_hook_shim_template.py")
-    # Inline fallback
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "observer",
-        PKG_ROOT / "archolith_mcp_audit" / "hook_observer.py",
-    )
-    # Just copy the observer module itself (it works as a script too)
-    shutil.copy2(
-        PKG_ROOT / "archolith_mcp_audit" / "hook_observer.py",
-        dest,
-    )
-    print(f"  Installed hook shim (from hook_observer.py): {dest}")
+    """Copy the standalone hook observer to ~/.claude/hooks/."""
+    _copy_hook_shim(CLAUDE_HOOK_DEST)
 
 
 def _add_claude_posttooluse_hook() -> None:
