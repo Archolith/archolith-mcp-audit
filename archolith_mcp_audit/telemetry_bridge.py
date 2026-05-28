@@ -159,6 +159,12 @@ class FileTelemetrySource:
 
         try:
             with open(self.path, encoding="utf-8") as f:
+                # Detect log rotation: if the file shrank since last read,
+                # a new file was written to the same path. Reset position.
+                f.seek(0, 2)
+                if f.tell() < self._file_pos:
+                    log.info("Telemetry file rotated, resetting read position")
+                    self._file_pos = 0
                 f.seek(self._file_pos)
                 for line in f:
                     line = line.strip()
