@@ -58,6 +58,47 @@ GEMINI_EXTENSIONS_DIR = HOME / ".gemini" / "extensions" / "archolith-audit"
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _tiktoken_status() -> tuple[bool, str]:
+    """Return (installed, version_or_reason)."""
+    try:
+        import importlib.metadata
+        version = importlib.metadata.version("tiktoken")
+        return True, version
+    except Exception:
+        return False, "not installed"
+
+
+def _ensure_tiktoken() -> bool:
+    """Check for tiktoken; offer to pip-install it if missing. Returns True if available."""
+    installed, info = _tiktoken_status()
+    if installed:
+        return True
+
+    print(f"  tiktoken is not installed.")
+    print(f"  Without it the hook uses a rough chars/4 estimate instead of real token counts.")
+    print(f"  Install command: {sys.executable} -m pip install tiktoken")
+    print()
+    if not _confirm("  Install tiktoken now?", default=True):
+        print("  Skipping — token counts will be approximate.")
+        return False
+
+    import subprocess
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "tiktoken"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        installed, info = _tiktoken_status()
+        if installed:
+            print(f"  tiktoken {info} installed successfully.")
+            return True
+    print(f"  pip install failed — install manually: pip install tiktoken")
+    if result.stderr:
+        print(f"  Error: {result.stderr.strip()[:200]}")
+    return False
+
+
 def _confirm(prompt: str, default: bool = False) -> bool:
     """Ask yes/no question. Returns True if user confirms."""
     suffix = " [Y/n]: " if default else " [y/N]: "
@@ -141,6 +182,7 @@ def install_claude() -> None:
         return
 
     _ensure_sessions_dir()
+    _ensure_tiktoken()
     _install_claude_hook_shim()
     _add_claude_posttooluse_hook()
     _register_claude_mcp_server()
@@ -291,6 +333,7 @@ def install_codex() -> None:
         print("  Aborted.")
         return
     _ensure_sessions_dir()
+    _ensure_tiktoken()
 
     # 1. Install hook shim
     _copy_hook_shim(CODEX_HOOK_DEST)
@@ -413,6 +456,12 @@ def check_status() -> None:
     print(f"\n  Telemetry:")
     print(f"    Sessions dir:          {OK if SESSIONS_DIR.exists() else FAIL}  {SESSIONS_DIR}")
     print(f"    Session files:         {sessions_count}")
+
+    # Dependencies
+    tiktoken_installed, tiktoken_info = _tiktoken_status()
+    print(f"\n  Dependencies:")
+    print(f"    tiktoken:              {OK if tiktoken_installed else FAIL}  "
+          f"{tiktoken_info if tiktoken_installed else 'not installed — token counts will be approximate (chars/4)'}")
 
 
 # ---------------------------------------------------------------------------
