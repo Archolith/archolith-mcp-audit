@@ -77,7 +77,13 @@ class LiveAccumulator:
         result = {}
         for server, acc in sorted(self.servers.items(), key=lambda x: -x[1].raw_chars):
             share = (acc.raw_chars / self.total_raw_chars * 100) if self.total_raw_chars > 0 else 0
-            savings = ((acc.raw_chars - acc.filtered_chars) / acc.raw_chars * 100) if acc.raw_chars > 0 else 0
+            # savings_pct only meaningful when filter is active and actually compressed.
+            # filtered_chars == 0 means "no filter data" (not "filtered to zero").
+            # filtered_chars == raw_chars means passthrough — no compression.
+            if acc.raw_chars > 0 and 0 < acc.filtered_chars < acc.raw_chars:
+                savings = (acc.raw_chars - acc.filtered_chars) / acc.raw_chars * 100
+            else:
+                savings = 0.0
             result[server] = {
                 "call_count": acc.call_count,
                 "raw_chars": acc.raw_chars,
