@@ -93,8 +93,13 @@ def compare_reports(
     return deltas
 
 
-def format_delta_report(deltas: list[ServerDelta]) -> str:
-    """Format comparison results as human-readable text."""
+def format_delta_report(deltas: list[ServerDelta], after: dict | None = None) -> str:
+    """Format comparison results as human-readable text.
+
+    Args:
+        deltas: Per-server comparison results.
+        after: The "after" JSON report dict, used to show remaining waste.
+    """
     lines = []
     lines.append("=" * 70)
     lines.append("MCP AUDIT COMPARISON")
@@ -121,6 +126,10 @@ def format_delta_report(deltas: list[ServerDelta]) -> str:
         if d.resolved_waste_types:
             lines.append(f"  Resolved waste types: {', '.join(d.resolved_waste_types)}")
 
+        # Explicit warning for servers that disappeared
+        if d.status == "removed":
+            lines.append(f"  WARNING: Server '{d.server}' present in before but missing in after data")
+
         status_labels = {
             "improved": "IMPROVED",
             "regressed": "REGRESSED",
@@ -130,6 +139,20 @@ def format_delta_report(deltas: list[ServerDelta]) -> str:
         }
         lines.append(f"  Status: {status_labels.get(d.status, d.status)}")
 
+        # Show remaining waste details for this server
+        if after and d.status != "removed" and d.after_waste > 0:
+            after_server = after.get("servers", {}).get(d.server, {})
+            after_findings = after_server.get("findings", [])
+            if after_findings:
+                lines.append(f"  Remaining waste:")
+                for f in after_findings[:3]:
+                    sev = f.get("severity", "unknown").upper()
+                    wtype = f.get("waste_type", "unknown")
+                    wasted = f.get("tokens_wasted", 0)
+                    lines.append(f"    [{sev}]  {wtype}  {wasted:,} tokens")
+                if len(after_findings) > 3:
+                    lines.append(f"    ... and {len(after_findings) - 3} more")
+
     # Summary
     total_waste_change = sum(d.waste_change for d in deltas)
     lines.append("")
@@ -138,8 +161,11 @@ def format_delta_report(deltas: list[ServerDelta]) -> str:
     lines.append("=" * 70)
     improved = [d for d in deltas if d.status == "improved"]
     regressed = [d for d in deltas if d.status == "regressed"]
+    removed = [d for d in deltas if d.status == "removed"]
     lines.append(f"  Servers improved:  {len(improved)}")
     lines.append(f"  Servers regressed: {len(regressed)}")
+    if removed:
+        lines.append(f"  Servers removed:   {len(removed)} (present in before, missing in after)")
     lines.append(f"  Total waste change: {total_waste_change:+,} tokens")
     if total_waste_change < 0:
         lines.append("  Overall: Optimization effective")

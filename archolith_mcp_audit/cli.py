@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         with open(after_path, encoding="utf-8") as f:
             after = json.load(f)
         deltas = compare_reports(before, after)
-        print(format_delta_report(deltas))
+        print(format_delta_report(deltas, after=after))
         # Exit 2 if any server regressed
         has_regression = any(d.status == "regressed" for d in deltas)
         return 2 if has_regression else 0
@@ -138,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("No session sources specified. Use --claude, --codex, --opencode, or --all")
 
     all_reports: list[AuditReport] = []
+    had_error = False
 
     for source_type, source_path in sources:
         try:
@@ -148,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         except Exception as e:
             print(f"Error processing {source_path}: {e}", file=sys.stderr)
+            had_error = True
             continue
 
         # Filter by server
@@ -185,12 +187,18 @@ def main(argv: list[str] | None = None) -> int:
         elif args.format == "markdown":
             print(format_report_markdown(report))
 
-    # Exit code: 2 if critical waste detected (non-CI mode)
+    # Exit codes: 0=success, 1=error, 2=critical waste detected
+    if had_error and not all_reports:
+        return 1  # All sources failed
     has_critical = any(
         any(f.severity == "critical" for sr in report.servers.values() for f in sr.findings)
         for report in all_reports
     )
-    return 2 if has_critical else 0
+    if has_critical:
+        return 2
+    if had_error:
+        return 1  # Some sources failed but we produced partial output
+    return 0
 
 
 if __name__ == "__main__":

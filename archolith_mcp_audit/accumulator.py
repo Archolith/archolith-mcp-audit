@@ -11,6 +11,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from archolith_mcp_audit.attributor import attribute_tool
+from archolith_mcp_audit.waste_detector import WasteFinding
 
 
 @dataclass
@@ -21,6 +22,7 @@ class ServerAccumulator:
     raw_chars: int = 0
     filtered_chars: int = 0
     tool_names: set[str] = field(default_factory=set)
+    waste_findings: list[WasteFinding] = field(default_factory=list)
 
 
 class LiveAccumulator:
@@ -61,6 +63,15 @@ class LiveAccumulator:
         filtered_chars = getattr(entry, "filtered_chars", 0)
         self.observe(tool_name, raw_chars, filtered_chars)
 
+    def add_waste_findings(self, findings: list[WasteFinding]) -> None:
+        """Add waste findings from a detection pass.
+
+        These are attached per-server so mcp_audit_detail can report them.
+        """
+        for f in findings:
+            acc = self.servers[f.server]
+            acc.waste_findings.append(f)
+
     def get_server_summary(self) -> dict[str, dict]:
         """Return per-server summary data."""
         result = {}
@@ -73,6 +84,7 @@ class LiveAccumulator:
                 "share_pct": round(share, 1),
                 "savings_pct": round(savings, 1),
                 "tools": sorted(acc.tool_names),
+                "waste_findings": acc.waste_findings,
             }
         return result
 

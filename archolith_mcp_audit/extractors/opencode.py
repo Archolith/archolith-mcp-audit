@@ -26,25 +26,33 @@ def extract_session(
     if session_id:
         sessions = [session_id]
     else:
-        sessions = [row[0] for row in c.execute(
-            "SELECT DISTINCT json_extract(data, '$.session_id') FROM part "
-            "WHERE json_extract(data, '$.session_id') IS NOT NULL LIMIT 100"
-        )]
+        try:
+            sessions = [row[0] for row in c.execute(
+                "SELECT DISTINCT json_extract(data, '$.session_id') FROM part "
+                "WHERE json_extract(data, '$.session_id') IS NOT NULL LIMIT 100"
+            )]
+        except sqlite3.OperationalError:
+            # json_extract fails on malformed JSON — fall back to empty
+            sessions = []
 
     # Use first session if not specified
     effective_session = sessions[0] if sessions else "unknown"
 
-    # Extract tool parts
-    query = "SELECT data FROM part WHERE data LIKE '%\"type\":\"tool\"%'"
+    # Extract tool parts — use parameterized query to prevent SQL injection
+    # JSON can have optional whitespace after colons, so match both "type":"tool" and "type": "tool"
+    params: list[str | int] = []
     if effective_session and effective_session != "unknown":
-        query += f" AND data LIKE '%\"session_id\":\"{effective_session}\"%'"
-    query += f" LIMIT {limit}"
+        query = "SELECT data FROM part WHERE data LIKE ? AND data LIKE ? LIMIT ?"
+        params = ['%"type":%"tool"%', f'%"session_id":%"{effective_session}"%', limit]
+    else:
+        query = "SELECT data FROM part WHERE data LIKE ? LIMIT ?"
+        params = ['%"type":%"tool"%', limit]
 
     tool_calls: list[ToolCall] = []
     tool_results: list[ToolResult] = []
     turn_number = 0
 
-    for row in c.execute(query):
+    for row in c.execute(query, params):
         try:
             data = json.loads(row[0])
         except (json.JSONDecodeError, TypeError):

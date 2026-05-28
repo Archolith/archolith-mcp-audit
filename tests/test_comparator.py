@@ -211,3 +211,45 @@ class TestFormatDeltaReport:
         assert "Servers improved:  1" in text
         assert "Servers regressed: 1" in text
         assert "-50" in text  # total waste change
+
+    def test_removed_server_warning(self) -> None:
+        """Removed server gets explicit WARNING."""
+        deltas = [ServerDelta(
+            server="delegate",
+            before_tokens=500, after_tokens=0,
+            token_change=-500, token_change_pct=-100.0,
+            before_waste=100, after_waste=0,
+            waste_change=-100, waste_change_pct=-100.0,
+            before_calls=5, after_calls=0,
+            new_waste_types=[], resolved_waste_types=[],
+            status="removed",
+        )]
+        text = format_delta_report(deltas)
+        assert "WARNING" in text
+        assert "missing in after" in text
+        assert "REMOVED" in text
+
+    def test_remaining_waste_shown_with_after(self) -> None:
+        """Remaining waste details shown when after dict provided."""
+        deltas = [ServerDelta(
+            server="gradle",
+            before_tokens=1000, after_tokens=500,
+            token_change=-500, token_change_pct=-50.0,
+            before_waste=800, after_waste=100,
+            waste_change=-700, waste_change_pct=-87.5,
+            before_calls=10, after_calls=10,
+            new_waste_types=[], resolved_waste_types=["format_waste"],
+            status="improved",
+        )]
+        after = {
+            "servers": {
+                "gradle": {
+                    "findings": [
+                        {"severity": "medium", "waste_type": "format_waste", "tokens_wasted": 100}
+                    ]
+                }
+            }
+        }
+        text = format_delta_report(deltas, after=after)
+        assert "Remaining waste" in text
+        assert "format_waste" in text

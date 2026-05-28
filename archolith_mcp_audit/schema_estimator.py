@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -54,7 +55,17 @@ def load_catalog(path: Path | None = None) -> dict[str, list[SchemaEntry]]:
     """
     target = path or _DEFAULT_CATALOG_PATH
     if not target.exists():
+        log.warning("Schema catalog not found at %s", target)
         return {}
+
+    # Staleness check
+    try:
+        age_days = (time.time() - target.stat().st_mtime) / 86400
+        if age_days > _STALE_DAYS:
+            log.warning("Schema catalog is %d days old (stale threshold: %d days). "
+                        "Run --refresh-schemas to update.", int(age_days), _STALE_DAYS)
+    except OSError:
+        pass  # Can't check mtime, proceed anyway
 
     try:
         with open(target, encoding="utf-8") as f:
