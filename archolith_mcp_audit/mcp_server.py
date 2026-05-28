@@ -49,8 +49,10 @@ def get_bridge() -> TelemetryBridge:
 
     The bridge is connected to the accumulator and optionally to
     external telemetry sources based on environment variables:
-      - MCP_AUDIT_RTK=1        — connect to RTK FilterTelemetryStore
-      - MCP_AUDIT_TELEMETRY_FILE — path to a JSONL telemetry file
+      - MCP_AUDIT_RTK=1          — connect to RTK FilterTelemetryStore
+      - MCP_AUDIT_TELEMETRY_FILE — explicit path to a JSONL telemetry file
+      - MCP_AUDIT_SESSION_ID     — session ID; auto-resolves file path
+      - (fallback)               — ~/.archolith/sessions/current.jsonl
     """
     global _bridge
     if _bridge is None:
@@ -59,9 +61,14 @@ def get_bridge() -> TelemetryBridge:
         if os.environ.get("MCP_AUDIT_RTK", "").lower() in ("1", "true", "yes"):
             _bridge.connect_rtk()
 
+        # Resolve telemetry file: explicit path > session ID > "current" fallback
         telemetry_file = os.environ.get("MCP_AUDIT_TELEMETRY_FILE", "")
-        if telemetry_file:
-            _bridge.connect_file(Path(telemetry_file))
+        if not telemetry_file:
+            session_id = os.environ.get("MCP_AUDIT_SESSION_ID", "current")
+            telemetry_file = str(
+                Path.home() / ".archolith" / "sessions" / f"{session_id}.jsonl"
+            )
+        _bridge.connect_file(Path(telemetry_file))
 
     return _bridge
 
