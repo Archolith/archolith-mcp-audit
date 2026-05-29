@@ -81,13 +81,30 @@ last-50-line tail every poll, completed jobs replayed the full output.
   change needed; the log-tail polling is a usage/discoverability matter.
 - Tests: 7 added in `tests/test_vps_server.py` (38 total pass).
 
-## Remaining per-server work (TODO 89237b0e)
+## Discoverability fix (shipped): harness session polling
 
-- **harness snapshot/screen (~28k)** — DISCOVERABILITY. Steer polling to existing
-  `harness_watch_session`; update `harness_get_session_snapshot` / `_screen` docstrings to point
-  at the cursor tool.
+Harness already has `harness_watch_session(sessionId, cursorPosition)` — cursor-based
+incremental output, the correct pattern — but agents polled `harness_get_session_screen` /
+`_snapshot` / `tail_session`, which re-send the whole last-N-lines window every call (~28k).
+
+`projects/ctharvey/cth.harness/harness_server.py` — docstrings updated so the schema text
+agents see steers repeated/live polling to `harness_watch_session`, and `harness_watch_session`'s
+own docstring now explains the cursor round-trip. No behavior change; 16 tests still pass.
+
+## Remaining work (TODO 89237b0e)
+
+All systemic polling sources are addressed. Not pursued (by design):
+
 - **memory query_structure / artifact_read re-reads (~42k, Category C)** — not a server-output
   problem. These are re-reads of static content; mitigated by client-side discipline / a
   "you already read this" hint, not a delta mode.
 - **delegate browse_like_human (138k), harness_delete_session (26k)** — Category D, single
   session each. Not systemic; skip.
+
+## Summary of shipped fixes
+
+| Server | Tool | Mechanism | Waste addressed |
+|---|---|---|---|
+| gradle | gradle_job_status | since_line cursor + status_only | ~154k |
+| vps | vps_job_status | lines_emitted cursor + since_line + status_only | ~203k |
+| harness | session screen/snapshot/tail | docstrings steer to harness_watch_session | ~28k |
