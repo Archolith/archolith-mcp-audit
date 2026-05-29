@@ -148,6 +148,53 @@ class TestRedundantFieldsDetection:
         redundant = [f for f in findings if f.waste_type == "redundant_fields"]
         assert len(redundant) == 0
 
+    def test_text_returning_tool_not_flagged(self) -> None:
+        """A known structured tool that returns plain text (not JSON) must not be
+        flagged — regression test for the query_structure false positive."""
+        text_out = (
+            "Files in cth.mcp.memory (12):\n"
+            "  src/a.py [module] - does a\n  src/b.py - does b"
+        )
+        results = [
+            ToolResult(tool_name="mcp__memory__query_structure",
+                        result_text=text_out, call_id=str(i), turn_number=i)
+            for i in range(4)
+        ]
+        session = SessionData(source="test", session_id="test", tool_results=results)
+        findings = detect_waste(session)
+        redundant = [f for f in findings if f.waste_type == "redundant_fields"]
+        assert len(redundant) == 0
+
+    def test_content_dominated_json_low_estimate(self) -> None:
+        """A result dominated by one large text field has little to trim — the
+        estimate must be low, not the old flat 50/70%."""
+        big = "x" * 4000
+        data = {"summary": big}
+        data.update({f"m{i}": i for i in range(12)})  # >10 fields → flagged
+        results = [
+            ToolResult(tool_name="mcp__memory__recall_memories",
+                        result_text=json.dumps(data), call_id="1", turn_number=1)
+        ]
+        session = SessionData(source="test", session_id="test", tool_results=results)
+        findings = detect_waste(session)
+        redundant = [f for f in findings if f.waste_type == "redundant_fields"]
+        assert len(redundant) >= 1
+        # almost all bytes are the content field, so trimmable share is tiny
+        assert redundant[0].estimated_savings_pct < 15.0
+
+    def test_metadata_heavy_estimate_capped(self) -> None:
+        """A metadata-heavy result scores higher but is capped at 50%."""
+        data = {f"k{i}": i for i in range(20)}
+        results = [
+            ToolResult(tool_name="mcp__harness__harness_get_session",
+                        result_text=json.dumps(data), call_id="1", turn_number=1)
+        ]
+        session = SessionData(source="test", session_id="test", tool_results=results)
+        findings = detect_waste(session)
+        redundant = [f for f in findings if f.waste_type == "redundant_fields"]
+        assert len(redundant) >= 1
+        assert 0 < redundant[0].estimated_savings_pct <= 50.0
+
 
 class TestSchemaCostDetection:
     """Tests for schema cost detector (3d)."""

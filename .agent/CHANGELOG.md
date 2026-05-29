@@ -1,5 +1,19 @@
 # Changelog — archolith-audit
 
+## 2026-05-29 — redundant_fields detector accuracy fix
+
+- `waste_detector._detect_redundant_fields` no longer flags text-returning tools. It now
+  requires a genuine JSON field count above threshold; `_count_json_fields` returns 0 for
+  non-JSON and bare scalars. Fixes the `query_structure` false positive (was the #1
+  redundant_fields source at ~92k, but it returns lean formatted text, not JSON).
+- Replaced the flat 50/70% recoverable assumption with a measured byte ratio
+  (`_trimmable_fraction`): metadata-like leaves (numbers, bools, short scalar strings) count
+  as trimmable; long content strings do not. Results dominated by a large text field now
+  score near 0% instead of 70%. Estimate capped at 50%.
+- Description now reports the representative (max) field count instead of the last result's
+  count (fixes the misleading "~1 fields").
+- Tests: 3 added in `test_waste_detector.py` (156 total pass).
+
 ## 2026-05-28 — Multi-session bridge and SessionStart naming hook
 
 - Added `hook_session_start.py`: standalone SessionStart hook — fires once per session, writes `~/.archolith/sessions/<session_id>.name` (human-readable label from CWD basename + date) and pre-touches the session JSONL file

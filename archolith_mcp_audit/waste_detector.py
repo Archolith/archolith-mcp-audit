@@ -241,18 +241,27 @@ def _detect_redundant_fields(
         if server == "non-mcp":
             continue
 
+        # Known structured tools get a lower field threshold, but ONLY when their
+        # result is genuinely JSON. Text-returning tools yield field_count == 0 and
+        # are never flagged (fixes the query_structure false positive).
+        threshold = 6 if tool_name in _OVERBROAD_TOOLS else 10
+
         overbroad = 0
         overbroad_tokens = 0
         overbroad_bytes = 0
+        max_field_count = 0
+        trimmable_sum = 0.0
         example = ""
 
         for r in results:
             field_count = _count_json_fields(r.result_text)
-            if field_count > 10 or tool_name in _OVERBROAD_TOOLS:
+            if field_count > threshold:
                 overbroad += 1
                 tc = count_tokens(r.result_text)
                 overbroad_tokens += tc.tokens_cl100k
                 overbroad_bytes += tc.bytes
+                max_field_count = max(max_field_count, field_count)
+                trimmable_sum += _trimmable_fraction(r.result_text)
                 if not example:
                     example = _truncate(r.result_text, 300)
 
@@ -260,8 +269,15 @@ def _detect_redundant_fields(
             total_calls = len(results)
             waste_pct = overbroad / total_calls
 
-            # Estimate: model likely needs only 20-30% of fields
-            est_waste_pct = 70.0 if tool_name in _OVERBROAD_TOOLS else 50.0
+            # Estimate recoverable share from the measured fraction of bytes held in
+            # metadata-like leaves, averaged over the overbroad results, capped at 50%.
+            # This replaces the old flat 50/70% assumption, which overstated savings
+            # for results dominated by a single large content field.
+            avg_trimmable = trimmable_sum / overbroad
+            est_waste_pct = round(min(50.0, avg_trimmable * 100), 1)
+
+            if est_waste_pct <= 0:
+                continue  # nothing measurably trimmable
 
             suggestion = ("Accept fields parameter to return only requested "
                            "data. Return graph nodes, not entire structure.")
@@ -279,7 +295,7 @@ def _detect_redundant_fields(
                 call_count=overbroad,
                 total_calls=total_calls,
                 description=f"{overbroad}/{total_calls} calls return overbroad "
-                            f"results ({overbroad_tokens:,} tokens, ~{field_count} fields)",
+                            f"results ({overbroad_tokens:,} tokens, up to {max_field_count} fields)",
                 suggestion=suggestion,
                 estimated_savings_pct=est_waste_pct,
                 example_before=example,
@@ -595,10 +611,14 @@ def _envelope_overhead_bytes(text: str) -> int:
 
 
 def _count_json_fields(text: str) -> int:
-    """Count total fields in a JSON result."""
+    """Count total fields in a JSON result. Returns 0 for non-JSON (e.g. plain text)."""
     try:
         obj = json.loads(text)
     except (json.JSONDecodeError, TypeError):
+        return 0
+
+    # A bare scalar (number/string/bool) is not a structured result.
+    if not isinstance(obj, (dict, list)):
         return 0
 
     def _count(o: object) -> int:
@@ -609,6 +629,56 @@ def _count_json_fields(text: str) -> int:
         return 0
 
     return _count(obj)
+
+
+# Scalar / short-string leaves are "metadata-like" and trimmable; long strings are
+# content the model usually needs and are NOT counted as recoverable.
+_SHORT_STRING_BYTES = 40
+
+
+def _trimmable_fraction(text: str) -> float:
+    """Fraction of a JSON result's bytes held in metadata-like (trimmable) leaves.
+
+    Numbers, booleans, nulls, and short scalar strings are treated as trimmable
+    metadata. Long strings (>= _SHORT_STRING_BYTES) are treated as content the model
+    needs and are excluded. Returns 0.0 for non-JSON or content-dominated results.
+
+    This replaces a flat 50/70% assumption with a measured byte ratio, so a result
+    dominated by one large text field is correctly scored as having little to trim.
+    """
+    try:
+        obj = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return 0.0
+    if not isinstance(obj, (dict, list)):
+        return 0.0
+
+    total = [0]
+    trimmable = [0]
+
+    def _walk(o: object) -> None:
+        if isinstance(o, dict):
+            for k, v in o.items():
+                klen = len(str(k))
+                total[0] += klen
+                _walk(v)
+        elif isinstance(o, list):
+            for item in o:
+                _walk(item)
+        else:
+            length = len(json.dumps(o, default=str))
+            total[0] += length
+            is_metadata = (
+                not isinstance(o, str)  # numbers, bools, null
+                or len(o) < _SHORT_STRING_BYTES  # short scalar strings
+            )
+            if is_metadata:
+                trimmable[0] += length
+
+    _walk(obj)
+    if total[0] == 0:
+        return 0.0
+    return trimmable[0] / total[0]
 
 
 def _json_format_overhead(text: str) -> float:
