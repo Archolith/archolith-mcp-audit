@@ -62,10 +62,27 @@ The job/status tools just never adopted it. Three mechanisms, by leverage:
 Long-poll (`wait_seconds`) was deferred — cursor delta + status_only capture the bulk at low
 risk; blocking semantics can be added later if needed.
 
+## Reference implementation (shipped): vps_job_status
+
+Per-tool drill-down showed the real vps polling culprit is **`vps_job_status`** (203k tokens
+over 2,199 calls) — same async-poll pattern as gradle: running streaming jobs replayed the
+last-50-line tail every poll, completed jobs replayed the full output.
+
+`projects/yawn/yawn.vps/vps/jobs.py` — `job_status` now accepts `since_line` and `status_only`:
+
+- Added a monotonic `lines_emitted` counter so the cursor stays valid even as the live buffer
+  (capped at 500 lines, oldest dropped) rolls. Running jobs return only `live_lines` after the
+  cursor; if the cursor predates the retained buffer, all retained lines are returned with a note.
+- Done/non-streaming jobs slice the final `output` by line; `next_line` is the total line count.
+- `status_only=True` omits output entirely. Default `since_line=0` preserves the first-poll
+  full view (backward compatible).
+- `vps_server.py` `vps_job_status` tool threads both params through with updated docstring.
+- `vps_service_logs` already has a timestamp-based `since` param for incremental tailing — no
+  change needed; the log-tail polling is a usage/discoverability matter.
+- Tests: 7 added in `tests/test_vps_server.py` (38 total pass).
+
 ## Remaining per-server work (TODO 89237b0e)
 
-- **vps (~110k)** — DESIGN. Add `since` cursor to `vps_service_logs`; add `status_only` to the
-  status calls dispatched through `call_tool` / `vps_gateway`.
 - **harness snapshot/screen (~28k)** — DISCOVERABILITY. Steer polling to existing
   `harness_watch_session`; update `harness_get_session_snapshot` / `_screen` docstrings to point
   at the cursor tool.
