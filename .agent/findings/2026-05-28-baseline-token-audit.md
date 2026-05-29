@@ -96,9 +96,11 @@ when few fields are used) and `polling` (repeated calls returning near-identical
 - **No true Anthropic tokenizer.** Anthropic does not publish one. `cl100k_base` (and
   `o200k_base`) are OpenAI tokenizers used as proxies; absolute counts are estimates within
   ~10-15% of Anthropic's real tokenization. Relative rankings between servers are reliable.
-- **Ground-truth provider usage not yet pulled** (separate TODO `f7dd2b09`): comparing these
-  estimates against Anthropic/OpenAI billing usage logs (prompt/completion/cached tokens)
-  would calibrate the proxy. Not done here.
+- **Ground-truth provider usage not available** (TODO `f7dd2b09`, closed N/A): calibrating
+  these estimates against Anthropic/OpenAI billing usage logs (prompt/completion/cached
+  tokens) is not possible — we run on the Claude Code subscription plan, not the
+  pay-per-token API, so no provider usage/billing logs exist to compare against. The cl100k
+  proxy is the practical ground truth for this workspace.
 - **`schema` overhead excluded** from waste totals — its per-turn `x N turns` extrapolation is
   not a measured per-result cost and dominates the numbers if included. Re-evaluate that
   metric's formula separately.
