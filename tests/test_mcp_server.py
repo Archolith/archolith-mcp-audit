@@ -9,39 +9,51 @@ from archolith_mcp_audit.waste_detector import WasteFinding
 
 
 class TestGetAccumulator:
-    """Tests for accumulator singleton."""
+    """Tests for per-session accumulator cache."""
 
     def test_returns_live_accumulator(self) -> None:
         """get_accumulator returns a LiveAccumulator instance."""
-        acc = get_accumulator()
+        acc = get_accumulator("test-session-acc")
         assert isinstance(acc, LiveAccumulator)
 
-    def test_singleton(self) -> None:
-        """Repeated calls return same instance."""
-        acc1 = get_accumulator()
-        acc2 = get_accumulator()
+    def test_same_session_returns_same_instance(self) -> None:
+        """Repeated calls with the same session_id return the same instance."""
+        acc1 = get_accumulator("test-session-same")
+        acc2 = get_accumulator("test-session-same")
         assert acc1 is acc2
+
+    def test_different_sessions_are_isolated(self) -> None:
+        """Different session IDs produce separate accumulators."""
+        acc_a = get_accumulator("session-a-unique")
+        acc_b = get_accumulator("session-b-unique")
+        assert acc_a is not acc_b
 
 
 class TestGetBridge:
-    """Tests for telemetry bridge singleton."""
+    """Tests for per-session telemetry bridge cache."""
 
     def test_returns_telemetry_bridge(self) -> None:
         """get_bridge returns a TelemetryBridge instance."""
-        bridge = get_bridge()
+        bridge = get_bridge("test-session-bridge")
         assert isinstance(bridge, TelemetryBridge)
 
     def test_bridge_connected_to_accumulator(self) -> None:
-        """Bridge's accumulator is the same singleton."""
-        bridge = get_bridge()
-        acc = get_accumulator()
+        """Bridge's accumulator matches the session's accumulator."""
+        bridge = get_bridge("test-session-linked")
+        acc = get_accumulator("test-session-linked")
         assert bridge.accumulator is acc
 
-    def test_singleton(self) -> None:
-        """Repeated calls return same instance."""
-        bridge1 = get_bridge()
-        bridge2 = get_bridge()
+    def test_same_session_returns_same_instance(self) -> None:
+        """Repeated calls with the same session_id return the same bridge."""
+        bridge1 = get_bridge("test-session-bridge-same")
+        bridge2 = get_bridge("test-session-bridge-same")
         assert bridge1 is bridge2
+
+    def test_different_sessions_are_isolated(self) -> None:
+        """Different session IDs produce separate bridges."""
+        bridge_a = get_bridge("bridge-session-a-unique")
+        bridge_b = get_bridge("bridge-session-b-unique")
+        assert bridge_a is not bridge_b
 
 
 class TestMcpAuditSummaryOutput:

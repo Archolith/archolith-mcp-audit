@@ -70,21 +70,29 @@ RTK filter_output() runs on each tool result
         │  (hook_observer)     │  Claude Code, Codex, OpenCode hooks
         └──────────┬───────────┘
                    │
-                   ▼
         ┌──────────────────────┐
-        │  Live Accumulator    │  In-memory per-session store
+        │  SessionStart hook   │  Fires once per session; writes
+        │  (hook_session_start)│  ~/.archolith/sessions/<id>.name
         └──────────┬───────────┘
                    │
                    ▼
-           mcp_audit_summary()      — per-server token share table
-           mcp_audit_detail()       — deep dive on one server
-           mcp_audit_check()        — threshold pass/fail
-           mcp_audit_bridge_status() — telemetry source status
+        ┌──────────────────────────────────┐
+        │  Per-session bridges             │  dict[session_id → TelemetryBridge]
+        │  list_active_sessions()          │  scans *.jsonl modified < 24h
+        └──────────┬───────────────────────┘
+                   │
+                   ▼
+           mcp_audit_summary()      — all active sessions, named
+           mcp_audit_detail()       — per-session server breakdown
+           mcp_audit_check()        — worst-case across sessions
+           mcp_audit_bridge_status() — per-session source status
 ```
 
 The accumulator is passive — it reads telemetry that already exists. No new pipeline stage, no interception, no overhead on the filter path.
 
 The TelemetryBridge provides a uniform interface for feeding observations from multiple backends into the accumulator. Hook observers are platform-specific listeners that convert LLM-platform events into observations.
+
+**Multi-session design:** `mcp_server.py` maintains per-session `LiveAccumulator` and `TelemetryBridge` instances keyed by `session_id`. The `SessionStart` hook (`hook_session_start.py`) fires once when a Claude Code session begins, writes a human-readable name (`YYYY-MM-DD-<project>`) to `~/.archolith/sessions/<id>.name`, and pre-touches the session JSONL file. MCP tools scan all session files modified in the last 24h and display results per session by name.
 
 ## Key Components
 

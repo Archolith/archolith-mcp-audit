@@ -26,51 +26,74 @@ try:
 except ImportError:
     _HAS_FASTMCP = False
 
+import time
+
 from archolith_mcp_audit.accumulator import LiveAccumulator
 from archolith_mcp_audit.attributor import _load_mapping
 from archolith_mcp_audit.telemetry_bridge import TelemetryBridge
 
-# Module-level singletons (one per process)
-_accumulator: LiveAccumulator | None = None
-_bridge: TelemetryBridge | None = None
+SESSIONS_DIR = Path.home() / ".archolith" / "sessions"
+MAX_SESSION_AGE_HOURS = 24
+
+# Per-session caches (keyed by session_id)
+_accumulators: dict[str, LiveAccumulator] = {}
+_bridges: dict[str, TelemetryBridge] = {}
 
 
-def get_accumulator() -> LiveAccumulator:
-    """Get or create the live accumulator."""
-    global _accumulator
-    if _accumulator is None:
+def list_active_sessions() -> list[str]:
+    """Return session IDs with JSONL files modified in the last 24h, newest first."""
+    if not SESSIONS_DIR.exists():
+        return []
+    cutoff = time.time() - MAX_SESSION_AGE_HOURS * 3600
+    sessions = [
+        p.stem for p in SESSIONS_DIR.glob("*.jsonl")
+        if p.stat().st_mtime > cutoff
+    ]
+    return sorted(
+        sessions,
+        key=lambda s: (SESSIONS_DIR / f"{s}.jsonl").stat().st_mtime,
+        reverse=True,
+    )
+
+
+def get_session_name(session_id: str) -> str:
+    """Return the human-readable name written by hook_session_start, or short ID."""
+    name_file = SESSIONS_DIR / f"{session_id}.name"
+    if name_file.exists():
+        return name_file.read_text(encoding="utf-8").strip()
+    return session_id[:16]
+
+
+def get_accumulator(session_id: str) -> LiveAccumulator:
+    """Get or create the live accumulator for a session."""
+    if session_id not in _accumulators:
         mapping = _load_mapping()
-        _accumulator = LiveAccumulator(server_mapping=mapping)
-    return _accumulator
+        _accumulators[session_id] = LiveAccumulator(server_mapping=mapping)
+    return _accumulators[session_id]
 
 
-def get_bridge() -> TelemetryBridge:
-    """Get or create the telemetry bridge.
+def get_bridge(session_id: str) -> TelemetryBridge:
+    """Get or create the telemetry bridge for a session.
 
-    The bridge is connected to the accumulator and optionally to
-    external telemetry sources based on environment variables:
+    Connects to ~/.archolith/sessions/<session_id>.jsonl written by the
+    hook_observer_standalone PostToolUse hook.
+    Also honours:
       - MCP_AUDIT_RTK=1          — connect to RTK FilterTelemetryStore
-      - MCP_AUDIT_TELEMETRY_FILE — explicit path to a JSONL telemetry file
-      - MCP_AUDIT_SESSION_ID     — session ID; auto-resolves file path
-      - (fallback)               — ~/.archolith/sessions/current.jsonl
+      - MCP_AUDIT_TELEMETRY_FILE — override file path (single-session compat)
     """
-    global _bridge
-    if _bridge is None:
-        _bridge = TelemetryBridge(accumulator=get_accumulator())
+    if session_id not in _bridges:
+        bridge = TelemetryBridge(accumulator=get_accumulator(session_id))
 
         if os.environ.get("MCP_AUDIT_RTK", "").lower() in ("1", "true", "yes"):
-            _bridge.connect_rtk()
+            bridge.connect_rtk()
 
-        # Resolve telemetry file: explicit path > session ID > "current" fallback
-        telemetry_file = os.environ.get("MCP_AUDIT_TELEMETRY_FILE", "")
-        if not telemetry_file:
-            session_id = os.environ.get("MCP_AUDIT_SESSION_ID", "current")
-            telemetry_file = str(
-                Path.home() / ".archolith" / "sessions" / f"{session_id}.jsonl"
-            )
-        _bridge.connect_file(Path(telemetry_file))
+        # Explicit override takes precedence (backward compat)
+        override = os.environ.get("MCP_AUDIT_TELEMETRY_FILE", "")
+        path = Path(override) if override else SESSIONS_DIR / f"{session_id}.jsonl"
+        bridge.connect_file(path)
+        _bridges[session_id] = bridge
 
-    return _bridge
+    return _bridges[session_id]
 
 
 if _HAS_FASTMCP:
@@ -122,90 +145,104 @@ if _HAS_FASTMCP:
 
         @mcp.tool()
         def mcp_audit_summary() -> str:
-            """Show per-server token usage summary for the current session.
+            """Show per-server token usage summary for all active sessions.
 
-            Returns a compact table showing each MCP server's token share,
-            call count, and compression savings. ~300 tokens.
+            Reads all ~/.archolith/sessions/*.jsonl files modified in the last
+            24 hours. Each session is shown with its human-readable name
+            (written by the SessionStart hook). ~300 tokens.
             """
-            bridge = get_bridge()
-            bridge.sync()
-            acc = get_accumulator()
-            summary = acc.get_server_summary()
-            mcp_share = acc.get_mcp_share()
-
-            if not summary:
-                return "No tool results observed yet in this session."
-
-            # Label: "tokens" when tiktoken data present, "chars" otherwise
-            unit = "tokens" if acc.total_raw_chars > 0 else "results"
-            lines = [f"MCP Token Usage (this session, {unit}):", ""]
-            for server, data in summary.items():
-                savings_flag = ""
-                if data["savings_pct"] > 0:
-                    savings_flag = f"  {data['savings_pct']:.0f}% filter savings"
-                lines.append(
-                    f"  {server:<25s} {data['share_pct']:>5.1f}%  "
-                    f"{data['call_count']:>4} calls  {data['raw_chars']:>6} {unit}{savings_flag}"
+            sessions = list_active_sessions()
+            if not sessions:
+                return (
+                    "No active sessions found in ~/.archolith/sessions/\n"
+                    "Ensure the SessionStart and PostToolUse hooks are installed."
                 )
 
-            lines.append("")
-            lines.append(f"  Total MCP share: {mcp_share:.1f}%")
-            lines.append(f"  Total {unit}: {acc.total_raw_chars:,}")
-            lines.append(f"  Total results: {acc.total_results}")
+            lines = [f"MCP Token Usage ({len(sessions)} active session(s)):", ""]
+            for session_id in sessions:
+                bridge = get_bridge(session_id)
+                bridge.sync()
+                acc = get_accumulator(session_id)
+                name = get_session_name(session_id)
+                summary = acc.get_server_summary()
+                mcp_share = acc.get_mcp_share()
+
+                lines.append(f"  [{name}]")
+                if not summary:
+                    lines.append("    — no observations yet")
+                else:
+                    for server, data in summary.items():
+                        savings_flag = ""
+                        if data["savings_pct"] > 0:
+                            savings_flag = f"  {data['savings_pct']:.0f}% savings"
+                        lines.append(
+                            f"    {server:<23s} {data['share_pct']:>5.1f}%"
+                            f"  {data['call_count']:>4} calls{savings_flag}"
+                        )
+                    lines.append(
+                        f"    MCP share: {mcp_share:.1f}%"
+                        f"  |  {acc.total_raw_chars:,} chars"
+                        f"  |  {acc.total_results} results"
+                    )
+                lines.append("")
 
             return "\n".join(lines)
 
         @mcp.tool()
         def mcp_audit_detail(server: str) -> str:
-            """Show detailed token usage for a specific MCP server.
+            """Show detailed token usage for a specific MCP server across all sessions.
 
             Args:
                 server: The MCP server name (e.g., 'gradle', 'vps', 'memory')
 
-            Returns waste findings and optimization suggestions. ~200-500 tokens.
+            Returns per-session breakdown with waste findings. ~200-500 tokens.
             """
-            bridge = get_bridge()
-            bridge.sync()
-            acc = get_accumulator()
-            summary = acc.get_server_summary()
+            sessions = list_active_sessions()
+            if not sessions:
+                return "No active sessions found."
 
-            if server not in summary:
-                available = [s for s in summary if s != "non-mcp"]
+            lines = [f"{server} — detail across active sessions:", ""]
+            found_any = False
+
+            for session_id in sessions:
+                bridge = get_bridge(session_id)
+                bridge.sync()
+                acc = get_accumulator(session_id)
+                summary = acc.get_server_summary()
+                name = get_session_name(session_id)
+
+                if server not in summary:
+                    continue
+                found_any = True
+                data = summary[server]
+                lines.append(
+                    f"  [{name}]  {data['call_count']} calls, "
+                    f"{data['raw_chars']:,} chars ({data['share_pct']:.1f}%)"
+                )
+                lines.append(f"    Tools: {', '.join(data['tools'][:6])}")
+                lines.append(f"    Compression savings: {data['savings_pct']:.1f}%")
+
+                findings = data.get("waste_findings", [])
+                if findings:
+                    lines.append("    Waste findings:")
+                    for f in findings[:3]:
+                        lines.append(f"      [{f.severity.upper()}] {f.waste_type}: {f.suggestion}")
+                    if len(findings) > 3:
+                        lines.append(f"      ... and {len(findings) - 3} more")
+                elif data["savings_pct"] > 80:
+                    lines.append("    Suggestion: Very verbose output — consider compact mode.")
+                elif data["savings_pct"] > 50:
+                    lines.append("    Suggestion: Moderate verbosity — envelope stripping may help.")
+                lines.append("")
+
+            if not found_any:
+                all_servers: set[str] = set()
+                for session_id in sessions:
+                    all_servers.update(get_accumulator(session_id).get_server_summary().keys())
+                available = sorted(s for s in all_servers if s != "non-mcp")
                 if available:
                     return f"Server '{server}' not found. Available: {', '.join(available)}"
                 return f"Server '{server}' not found. No MCP servers observed yet."
-
-            data = summary[server]
-            lines = [
-                f"{server} — {data['call_count']} calls, "
-                f"{data['raw_chars']:,} chars ({data['share_pct']:.1f}%)",
-                "",
-                f"Tools: {', '.join(data['tools'][:8])}",
-                f"Compression savings: {data['savings_pct']:.1f}%",
-            ]
-
-            # Report actual waste findings if available
-            findings = data.get("waste_findings", [])
-            if findings:
-                lines.append("")
-                lines.append("Waste findings:")
-                for f in findings[:5]:  # Limit to 5 findings
-                    sev = f.severity.upper()
-                    lines.append(f"  [{sev}]  {f.waste_type}")
-                    lines.append(f"    {f.description}")
-                    lines.append(f"    Wasted: {f.tokens_wasted:,} tokens")
-                    lines.append(f"    Suggestion: {f.suggestion}")
-                    lines.append(f"    Est. savings: {f.estimated_savings_pct:.0f}%")
-                if len(findings) > 5:
-                    lines.append(f"  ... and {len(findings) - 5} more findings")
-            elif data["savings_pct"] > 80:
-                lines.append("")
-                lines.append("Suggestion: High compression indicates server output is "
-                             "very verbose. Consider compact mode or field filtering.")
-            elif data["savings_pct"] > 50:
-                lines.append("")
-                lines.append("Suggestion: Moderate compression. Envelope stripping "
-                             "or help-on-demand could reduce output size.")
 
             return "\n".join(lines)
 
@@ -214,60 +251,65 @@ if _HAS_FASTMCP:
             max_server_share: float = 20.0,
             max_total_mcp_share: float = 40.0,
         ) -> str:
-            """Check if token usage exceeds thresholds.
+            """Check if token usage exceeds thresholds across all active sessions.
 
             Args:
                 max_server_share: Maximum allowed share per server (default 20%)
                 max_total_mcp_share: Maximum total MCP share (default 40%)
 
-            Returns pass/fail for each threshold. ~50-100 tokens.
+            Returns pass/fail for each session. ~50-150 tokens.
             """
-            bridge = get_bridge()
-            bridge.sync()
-            acc = get_accumulator()
-            summary = acc.get_server_summary()
-            mcp_share = acc.get_mcp_share()
+            sessions = list_active_sessions()
+            if not sessions:
+                return "No active sessions found."
 
-            results = []
+            lines = []
             overall = "PASS"
 
-            # Check per-server thresholds
-            for server, data in summary.items():
-                if server == "non-mcp":
-                    continue
-                if data["share_pct"] > max_server_share:
-                    results.append(f"FAIL  {server} exceeds {max_server_share:.0f}% "
-                                 f"server share ({data['share_pct']:.1f}%)")
+            for session_id in sessions:
+                bridge = get_bridge(session_id)
+                bridge.sync()
+                acc = get_accumulator(session_id)
+                summary = acc.get_server_summary()
+                mcp_share = acc.get_mcp_share()
+                name = get_session_name(session_id)
+
+                lines.append(f"[{name}]")
+                for server, data in summary.items():
+                    if server == "non-mcp":
+                        continue
+                    if data["share_pct"] > max_server_share:
+                        lines.append(f"  FAIL  {server} {data['share_pct']:.1f}% > {max_server_share:.0f}%")
+                        overall = "FAIL"
+                    else:
+                        lines.append(f"  OK    {server} {data['share_pct']:.1f}%")
+                if mcp_share > max_total_mcp_share:
+                    lines.append(f"  FAIL  Total MCP {mcp_share:.1f}% > {max_total_mcp_share:.0f}%")
                     overall = "FAIL"
                 else:
-                    results.append(f"OK    {server} within limit ({data['share_pct']:.1f}%)")
+                    lines.append(f"  OK    Total MCP {mcp_share:.1f}%")
+                lines.append("")
 
-            # Check total MCP share
-            if mcp_share > max_total_mcp_share:
-                results.append(f"FAIL  Total MCP share exceeds {max_total_mcp_share:.0f}% "
-                               f"({mcp_share:.1f}%)")
-                overall = "FAIL"
-            else:
-                results.append(f"OK    Total MCP share within limit ({mcp_share:.1f}%)")
-
-            results.append(f"\nResult: {overall}")
-            return "\n".join(results)
+            lines.append(f"Result: {overall}")
+            return "\n".join(lines)
 
         @mcp.tool()
         def mcp_audit_bridge_status() -> str:
-            """Show telemetry bridge connection status.
+            """Show telemetry bridge status for all active sessions. ~50 tokens."""
+            sessions = list_active_sessions()
+            if not sessions:
+                return "No active sessions found in ~/.archolith/sessions/"
 
-            Returns the number of connected telemetry sources and
-            total synced observations. ~50 tokens.
-            """
-            bridge = get_bridge()
-            bridge.sync()
-            total = bridge.total_synced
-            sources = bridge.source_count()
-            active = bridge.active_source_count()
-
-            return (f"Telemetry bridge: {active}/{sources} sources active, "
-                    f"{total} observations synced")
+            lines = []
+            for session_id in sessions:
+                bridge = get_bridge(session_id)
+                bridge.sync()
+                name = get_session_name(session_id)
+                lines.append(
+                    f"[{name}]  {bridge.active_source_count()}/{bridge.source_count()} sources"
+                    f"  {bridge.total_synced} observations"
+                )
+            return "\n".join(lines)
 
         def run_server() -> None:
             """Start the MCP server."""

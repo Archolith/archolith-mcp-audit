@@ -6,12 +6,12 @@ Installs the PostToolUse hook observer and enables the MCP server for a
 given agent. Idempotent — safe to re-run.
 
 Usage:
-    python scripts/install.py claude       # Claude Code (global settings)
-    python scripts/install.py codex        # Codex (hooks.json)
-    python scripts/install.py opencode     # OpenCode (npm plugin)
-    python scripts/install.py gemini       # Gemini CLI (extension.json)
-    python scripts/install.py --check      # Print current install status for all agents
-    python scripts/install.py --uninstall claude  # Remove hook entry
+  python scripts/install.py claude    # Claude Code (global settings)
+  python scripts/install.py codex     # Codex (hooks.json)
+  python scripts/install.py opencode  # OpenCode (npm plugin)
+  python scripts/install.py gemini    # Gemini CLI (extension.json)
+  python scripts/install.py --check   # Print current install status for all agents
+  python scripts/install.py --uninstall claude  # Remove hook entry
 
 Supported agents: claude, codex, opencode, gemini
 """
@@ -43,6 +43,7 @@ IS_WINDOWS = platform.system() == "Windows"
 # archolith-audit package root (this script lives in scripts/)
 PKG_ROOT = Path(__file__).parent.parent.resolve()
 HOOK_SRC = PKG_ROOT / "archolith_mcp_audit" / "hook_observer_standalone.py"
+SESSION_START_HOOK_SRC = PKG_ROOT / "archolith_mcp_audit" / "hook_session_start.py"
 
 # archolith telemetry directory
 SESSIONS_DIR = HOME / ".archolith" / "sessions"
@@ -157,6 +158,7 @@ def _copy_hook_shim(dest: Path) -> None:
 # ---------------------------------------------------------------------------
 
 CLAUDE_HOOK_DEST = CLAUDE_HOOKS_DIR / "archolith-audit-observer.py"
+CLAUDE_SESSION_START_DEST = CLAUDE_HOOKS_DIR / "archolith-audit-session-start.py"
 CLAUDE_MCP_SERVER_KEY = "archolith-audit"
 CLAUDE_MCP_SERVER_ENTRY = {
     "command": _python_exe(),
@@ -172,9 +174,10 @@ CLAUDE_MCP_SERVER_ENTRY = {
 def install_claude() -> None:
     print("\n=== Claude Code ===")
     print(f"  This will:")
-    print(f"    1. Copy hook shim to:       {CLAUDE_HOOK_DEST}")
-    print(f"    2. Add PostToolUse hook to: {CLAUDE_SETTINGS}")
-    print(f"    3. Register MCP server in:  <nearest .mcp.json>")
+    print(f"  1. Copy hook shim to: {CLAUDE_HOOK_DEST}")
+    print(f"  2. Add PostToolUse hook to: {CLAUDE_SETTINGS}")
+    print(f"  3. Add SessionStart hook to: {CLAUDE_SETTINGS}")
+    print(f"  4. Register MCP server in: <nearest .mcp.json>")
     print()
 
     if not _confirm("Proceed with Claude Code installation?", default=True):
@@ -185,10 +188,11 @@ def install_claude() -> None:
     _ensure_tiktoken()
     _install_claude_hook_shim()
     _add_claude_posttooluse_hook()
+    _install_claude_session_start_hook()
     _register_claude_mcp_server()
 
     print("\n  IMPORTANT: Restart Claude Code or open /hooks to reload settings.")
-    print("  Then run: mcp_audit_summary  (or /audit if the skill is installed)")
+    print("  Then run: mcp_audit_summary (or /audit if the skill is installed)")
 
 
 def _ensure_sessions_dir() -> None:
@@ -233,6 +237,47 @@ def _add_claude_posttooluse_hook() -> None:
     print(f"  Added PostToolUse hook → {hook_command}")
 
 
+def _install_claude_session_start_hook() -> None:
+    """Copy SessionStart hook shim and add entry to ~/.claude/settings.json. Idempotent."""
+    # Copy hook shim
+    if not SESSION_START_HOOK_SRC.exists():
+        print(f"  ERROR: SessionStart hook source not found: {SESSION_START_HOOK_SRC}")
+        print("  Re-install the package with: pip install -e .")
+        return
+    CLAUDE_SESSION_START_DEST.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SESSION_START_HOOK_SRC, CLAUDE_SESSION_START_DEST)
+    print(f"  Installed session start shim: {CLAUDE_SESSION_START_DEST}")
+
+    # Add SessionStart entry to settings.json
+    settings = _load_json(CLAUDE_SETTINGS)
+    hooks = settings.setdefault("hooks", {})
+    session_start_hooks = hooks.setdefault("SessionStart", [])
+
+    hook_command = (
+        f"{_python_exe()} "
+        f"{_posix_path(CLAUDE_SESSION_START_DEST)}"
+    )
+
+    # Check if already installed
+    for entry in session_start_hooks:
+        for h in entry.get("hooks", []):
+            if "archolith-audit-session-start" in h.get("command", ""):
+                print(f"  SessionStart hook already present in {CLAUDE_SETTINGS}")
+                return
+
+    session_start_hooks.append({
+        "hooks": [
+            {
+                "type": "command",
+                "command": hook_command,
+                "timeout": 3000,
+            }
+        ],
+    })
+    _write_json(CLAUDE_SETTINGS, settings)
+    print(f"  Added SessionStart hook → {hook_command}")
+
+
 def _register_claude_mcp_server() -> None:
     """
     Register archolith-audit MCP server.
@@ -263,15 +308,17 @@ def _register_claude_mcp_server() -> None:
 
 def uninstall_claude() -> None:
     print("\n=== Claude Code — Uninstall ===")
-    print(f"  This will remove the PostToolUse hook entry from {CLAUDE_SETTINGS}.")
-    print(f"  The hook shim file will NOT be deleted.")
+    print(f"  This will remove the PostToolUse and SessionStart hook entries from {CLAUDE_SETTINGS}.")
+    print(f"  The hook shim files will NOT be deleted.")
     print()
     if not _confirm("Proceed with uninstall?", default=False):
         print("  Aborted.")
         return
 
-    # Remove hook entry from settings.json
+    # Remove hook entries from settings.json
     settings = _load_json(CLAUDE_SETTINGS)
+
+    # Remove PostToolUse hook entry
     post_hooks = settings.get("hooks", {}).get("PostToolUse", [])
     before = len(post_hooks)
     settings["hooks"]["PostToolUse"] = [
@@ -285,6 +332,21 @@ def uninstall_claude() -> None:
         print("  Removed PostToolUse hook entry.")
     else:
         print("  No PostToolUse hook entry found — nothing to remove.")
+
+    # Remove SessionStart hook entry
+    session_start_hooks = settings.get("hooks", {}).get("SessionStart", [])
+    before = len(session_start_hooks)
+    settings["hooks"]["SessionStart"] = [
+        e for e in session_start_hooks
+        if not any("archolith-audit-session-start" in h.get("command", "")
+                   for h in e.get("hooks", []))
+    ]
+    after = len(settings["hooks"]["SessionStart"])
+    if before != after:
+        _write_json(CLAUDE_SETTINGS, settings)
+        print("  Removed SessionStart hook entry.")
+    else:
+        print("  No SessionStart hook entry found — nothing to remove.")
 
     # Leave hook shim in place (not destructive)
     print("  Hook shim left in place (delete manually if desired).")
@@ -301,9 +363,9 @@ CODEX_HOOK_DEST = HOME / ".codex" / "hooks" / "archolith-audit-observer.py"
 def install_codex() -> None:
     print("\n=== Codex ===")
     print(f"  This will:")
-    print(f"    1. Copy hook shim to: {CODEX_HOOK_DEST}")
-    print(f"    2. Add PostToolUse entry to: {CODEX_HOOKS_JSON}")
-    print(f"    3. Register MCP server in: {HOME / '.codex' / 'mcp.json'}")
+    print(f"  1. Copy hook shim to: {CODEX_HOOK_DEST}")
+    print(f"  2. Add PostToolUse entry to: {CODEX_HOOKS_JSON}")
+    print(f"  3. Register MCP server in: {HOME / '.codex' / 'mcp.json'}")
     print()
     if not _confirm("Proceed with Codex installation?", default=True):
         print("  Aborted.")
@@ -390,6 +452,13 @@ def check_status() -> None:
     )
     claude_shim = CLAUDE_HOOK_DEST.exists()
 
+    session_start_hooks = settings.get("hooks", {}).get("SessionStart", [])
+    claude_session_hook = any(
+        "archolith-audit-session-start" in h.get("command", "")
+        for entry in session_start_hooks for h in entry.get("hooks", [])
+    )
+    claude_session_shim = CLAUDE_SESSION_START_DEST.exists()
+
     # Check .mcp.json files for archolith-audit
     mcp_registered = False
     for mcp_path in [
@@ -407,11 +476,14 @@ def check_status() -> None:
                 break
 
     print(f"  Claude Code:")
-    print(f"    Hook shim installed:   {OK if claude_shim else FAIL}  {CLAUDE_HOOK_DEST}")
-    print(f"    PostToolUse hook:      {OK if claude_hook else FAIL}  {CLAUDE_SETTINGS}")
+    print(f"    Hook shim installed: {OK if claude_shim else FAIL} {CLAUDE_HOOK_DEST}")
+    print(f"    PostToolUse hook:   {OK if claude_hook else FAIL} {CLAUDE_SETTINGS}")
+    print(f"    Session start shim: {OK if claude_session_shim else FAIL} {CLAUDE_SESSION_START_DEST}")
+    print(f"    SessionStart hook:  {OK if claude_session_hook else FAIL} {CLAUDE_SETTINGS}")
     print(f"    MCP server registered: {OK if mcp_registered else FAIL}")
     if mcp_registered:
-        print(f"    MCP_AUDIT_ENABLED:     {f"{OK if mcp_enabled else FAIL + '  (set MCP_AUDIT_ENABLED=1)'}"}")
+        enabled_flag = OK if mcp_enabled else f"{FAIL}  (set MCP_AUDIT_ENABLED=1)"
+        print(f"    MCP_AUDIT_ENABLED:     {enabled_flag}")
 
     # Codex
     codex_cfg = _load_json(CODEX_HOOKS_JSON)
@@ -420,23 +492,23 @@ def check_status() -> None:
         for h in codex_cfg.get("PostToolUse", [])
     )
     print(f"\n  Codex:")
-    print(f"    Hook shim installed:   {OK if CODEX_HOOK_DEST.exists() else FAIL}  {CODEX_HOOK_DEST}")
-    print(f"    hooks.json entry:      {OK if codex_hook else FAIL}  {CODEX_HOOKS_JSON}")
+    print(f"    Hook shim installed: {OK if CODEX_HOOK_DEST.exists() else FAIL} {CODEX_HOOK_DEST}")
+    print(f"    hooks.json entry:    {OK if codex_hook else FAIL} {CODEX_HOOKS_JSON}")
 
     # OpenCode / Gemini
-    print(f"\n  OpenCode:              NOT IMPLEMENTED")
-    print(f"  Gemini CLI:            NOT IMPLEMENTED")
+    print(f"\n  OpenCode: NOT IMPLEMENTED")
+    print(f"  Gemini CLI: NOT IMPLEMENTED")
 
     # Sessions dir
     sessions_count = len(list(SESSIONS_DIR.glob("*.jsonl"))) if SESSIONS_DIR.exists() else 0
     print(f"\n  Telemetry:")
-    print(f"    Sessions dir:          {OK if SESSIONS_DIR.exists() else FAIL}  {SESSIONS_DIR}")
-    print(f"    Session files:         {sessions_count}")
+    print(f"    Sessions dir:   {OK if SESSIONS_DIR.exists() else FAIL} {SESSIONS_DIR}")
+    print(f"    Session files:  {sessions_count}")
 
     # Dependencies
     tiktoken_installed, tiktoken_info = _tiktoken_status()
     print(f"\n  Dependencies:")
-    print(f"    tiktoken:              {OK if tiktoken_installed else FAIL}  "
+    print(f"    tiktoken: {OK if tiktoken_installed else FAIL} "
           f"{tiktoken_info if tiktoken_installed else 'not installed — token counts will be approximate (chars/4)'}")
 
 

@@ -1,5 +1,13 @@
 # Changelog — archolith-audit
 
+## 2026-05-28 — Multi-session bridge and SessionStart naming hook
+
+- Added `hook_session_start.py`: standalone SessionStart hook — fires once per session, writes `~/.archolith/sessions/<session_id>.name` (human-readable label from CWD basename + date) and pre-touches the session JSONL file
+- Updated `mcp_server.py`: replaced singleton `_accumulator`/`_bridge` with per-session dicts keyed by `session_id`; added `list_active_sessions()` (scans last 24h JSONL files), `get_session_name()`, `get_accumulator(session_id)`, `get_bridge(session_id)`; all four MCP tools now iterate all active sessions and display per-session named output
+- Updated `scripts/install.py`: added `SESSION_START_HOOK_SRC`/`CLAUDE_SESSION_START_DEST` constants; `install_claude()` now also installs and registers the SessionStart hook; `uninstall_claude()` removes it; `--check` shows SessionStart hook status
+- Installed `~/.claude/hooks/archolith-audit-session-start.py` and registered in `settings.json` `SessionStart` block
+- 153 tests passing
+
 ## 2026-05-27 — Telemetry bridge and hook observers
 
 - Added `telemetry_bridge.py`: TelemetryBridge, RtkTelemetrySource, FileTelemetrySource, InMemoryTelemetrySource
