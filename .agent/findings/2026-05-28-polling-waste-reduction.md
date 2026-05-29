@@ -101,10 +101,34 @@ All systemic polling sources are addressed. Not pursued (by design):
 - **delegate browse_like_human (138k), harness_delete_session (26k)** — Category D, single
   session each. Not systemic; skip.
 
+## Memory redundant_fields (TODO 89237b0e, redundant_fields half)
+
+The TODO also bundled memory field-filtering. Per-tool drill-down of memory's
+`redundant_fields` flags:
+
+- `query_structure` (92k flagged) — **false positive**. It is a `BaseTextTool` that already
+  returns lean formatted text (`  path [role] — desc`), not field-bloated JSON. The detector's
+  "overbroad (~1 fields)" heuristic misfires on text output; there is no JSON field bloat to
+  trim. No change made.
+- `recall_memories` (49k flagged, 27 sessions) — **genuine**. Each JSON item carried a
+  `breakdown` nested dict (4 sub-score floats) + `type`, plus a top-level `candidates_evaluated`.
+  The LLM acts on `score`/`scope`/`relevance`, not the breakdown sub-scores.
+
+Fix (shipped): added opt-in `_compact` to `recall_memories` (and a `compact` flag to
+`_compact_scored_item`) that drops `breakdown`, `type`, and `candidates_evaluated` while keeping
+`uuid`/`name`/`scope`/`score`/`relevance`/`summary`. Resolves from the
+`CTH_MCP_MEMORY_RECALL_COMPACT` env default when unset. Default path is byte-identical, so the
+existing `breakdown`-asserting tests are unchanged.
+
+Note: the redundant_fields detector overestimates savings (assumes 50% on any "overbroad"
+result) and misfires on text tools. The realistic recall_memories saving is the breakdown+type
+overhead (~70-90 tokens/call), not the flagged 49k.
+
 ## Summary of shipped fixes
 
 | Server | Tool | Mechanism | Waste addressed |
 |---|---|---|---|
-| gradle | gradle_job_status | since_line cursor + status_only | ~154k |
-| vps | vps_job_status | lines_emitted cursor + since_line + status_only | ~203k |
-| harness | session screen/snapshot/tail | docstrings steer to harness_watch_session | ~28k |
+| gradle | gradle_job_status | since_line cursor + status_only | ~154k (polling) |
+| vps | vps_job_status | lines_emitted cursor + since_line + status_only | ~203k (polling) |
+| harness | session screen/snapshot/tail | docstrings steer to harness_watch_session | ~28k (polling) |
+| memory | recall_memories | opt-in _compact drops breakdown/type/candidates_evaluated | redundant_fields |
