@@ -91,6 +91,22 @@ when few fields are used) and `polling` (repeated calls returning near-identical
 5. memory — field filtering on query_structure results (~153k)
 6. workspace-artifacts — verify the 2026-05-28 compact/line-range changes reduce the 608k
 
+## Status update — compact-mode rollout (2026-05-28)
+
+The compact-mode work (CompactMixin convention + plans 2-4, plus delegate) shipped opt-in
+`_compact` params and `*_set_mode` session-default tools to **harness, vps,
+workspace-artifacts, and delegate**. This directly attacks the `redundant_fields` waste type
+(the #1 pattern, 1.02M tokens / 54% of recoverable), with the largest single win
+(workspace-artifacts 608k) fully addressed. TODO `95a6c8d1` is closed on this basis.
+
+**Still open after compact rollout** (tracked as a focused follow-up TODO):
+
+- **Polling waste (~841k, 44% of recoverable)** is NOT addressed by compact mode — it needs
+  delta / status-only response modes, a different mechanism than field-trimming. Affects vps
+  (145k), delegate (309k), gradle (154k), harness (162k).
+- **memory** (456k share, 153k redundant_fields) and **gradle** (255k) received no compact
+  mode and should get field-filtering / delta modes.
+
 ## Limitations
 
 - **No true Anthropic tokenizer.** Anthropic does not publish one. `cl100k_base` (and
