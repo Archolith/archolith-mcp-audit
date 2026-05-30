@@ -1,6 +1,11 @@
 # archolith-audit
 
-MCP token usage audit system. Measures per-server token cost, detects waste patterns, and produces report cards with concrete optimization suggestions. Part of the [archolith](https://archolith.dev) product family.
+MCP token usage audit system. Measures per-server token cost, detects waste patterns, and produces report cards with concrete optimization suggestions. Part of the [archolith&trade;](https://archolith.dev) stack.
+
+## License
+
+Source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Free for non-commercial use; commercial use requires permission from the licensor.
 
 ## What it does
 

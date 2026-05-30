@@ -8,13 +8,13 @@ version = "0.1.0"
 description = "MCP token usage audit system — measures per-server token cost, detects waste patterns, and drives server-side fixes"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
-authors = [{ name = "Archolith" }]
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
+authors = [{ name = "Charles Harvey", email = "ctharvey@me.com" }]
 keywords = ["mcp", "token", "audit", "llm", "optimization"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
