@@ -11,6 +11,7 @@ Two modes:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -23,6 +24,10 @@ log = logging.getLogger(__name__)
 
 _DEFAULT_CATALOG_PATH = Path(__file__).parent / "data" / "schema_catalog.json"
 _STALE_DAYS = 30
+_PER_SERVER_TIMEOUT = 15.0  # seconds per server for list_tools query
+
+# Commands that indicate a Python process (for self-exclusion check)
+_PYTHON_COMMANDS = frozenset({"python", "python3", "python.exe"})
 
 
 @dataclass
@@ -46,6 +51,245 @@ class ServerSchemaCost:
         """Compute per_turn and session costs."""
         self.per_turn_cost = sum(t.schema_tokens for t in self.tools)
         self.session_cost = self.per_turn_cost * total_turns
+
+
+def _is_self_server(name: str, command: str, args: list[str]) -> bool:
+    """Check whether an MCP server entry refers to archolith-mcp-audit itself.
+
+    Two checks:
+      1. Server name matches ``archolith-audit``.
+      2. Command is a Python interpreter AND any argument contains
+         ``archolith_mcp_audit``.
+
+    Returns True if either check fires.
+    """
+    if name == "archolith-audit":
+        log.debug("Skipping self by server name: %s", name)
+        return True
+
+    cmd_lower = command.strip().lower()
+    if cmd_lower in _PYTHON_COMMANDS or cmd_lower.endswith(".exe") and "python" in cmd_lower:
+        for arg in args:
+            if "archolith_mcp_audit" in arg:
+                log.debug("Skipping self by command pattern: %s %s", command, args)
+                return True
+
+    return False
+
+
+def _find_mcp_config() -> Path | None:
+    """Locate the nearest ``.mcp.json`` config file.
+
+    Search order:
+      1. Current working directory
+      2. Parent directories up to filesystem root
+      3. ``~/.claude/.mcp.json`` (fallback)
+
+    Returns the first path found, or None.
+    """
+    cwd = Path.cwd()
+    for parent in [cwd, *cwd.parents]:
+        candidate = parent / ".mcp.json"
+        if candidate.is_file():
+            log.debug("Found .mcp.json at %s", candidate)
+            return candidate
+
+    fallback = Path.home() / ".claude" / ".mcp.json"
+    if fallback.is_file():
+        log.debug("Found .mcp.json at %s (user fallback)", fallback)
+        return fallback
+
+    return None
+
+
+async def _query_server_via_fastmcp(
+    server_name: str,
+    command: str,
+    args: list[str],
+    cwd: str | None,
+    env: dict | None,
+) -> list[dict]:
+    """Query one MCP server for tool definitions via FastMCP Client.
+
+    Returns a list of tool definition dicts with keys ``name``, ``description``,
+    ``parameters`` (inputSchema).
+
+    Raises
+    ------
+    asyncio.TimeoutError
+        If the server does not respond within ``_PER_SERVER_TIMEOUT``.
+    FileNotFoundError
+        If the server command is not on PATH.
+    Exception
+        Any FastMCP-level error.
+    """
+    from fastmcp import Client  # noqa: PLC0415  -- late import; dependency is optional
+
+    client = Client(
+        command=command,
+        args=args,
+        cwd=cwd,
+        env=env,
+    )
+    async with client:
+        tools = await asyncio.wait_for(
+            client.list_tools(),
+            timeout=_PER_SERVER_TIMEOUT,
+        )
+        return [
+            {
+                "name": t.name,
+                "description": t.description or "",
+                "parameters": t.inputSchema or {},
+            }
+            for t in tools
+        ]
+
+
+async def _refresh_all_servers(
+    servers_config: dict,
+    failed_servers: dict[str, str],
+) -> dict[str, list[dict]]:
+    """Query all configured servers sequentially, returning the catalog dict.
+
+    Each server that fails is recorded in ``failed_servers`` with an error
+    message. The catalog will contain only successfully queried servers.
+    """
+    catalog: dict[str, list[dict]] = {}
+
+    for server_name, server_conf in servers_config.items():
+        command = server_conf.get("command", "")
+        args = server_conf.get("args", [])
+        cwd = server_conf.get("cwd")
+        env = server_conf.get("env")
+
+        # Skip self
+        if _is_self_server(server_name, command, args):
+            log.info("Skipping archolith-mcp-audit itself (%s)", server_name)
+            continue
+
+        # Only stdio transport is supported (command field present)
+        if not command:
+            log.warning("Skipping %s — no command field (SSE/HTTP transport?)", server_name)
+            continue
+
+        log.info("Querying %s for tool schemas...", server_name)
+
+        try:
+            tool_defs = await _query_server_via_fastmcp(
+                server_name=server_name,
+                command=command,
+                args=args,
+                cwd=cwd,
+                env=env,
+            )
+        except asyncio.TimeoutError:
+            failed_servers[server_name] = f"timed out after {_PER_SERVER_TIMEOUT}s"
+            log.warning("Timed out querying %s", server_name)
+            continue
+        except FileNotFoundError:
+            failed_servers[server_name] = f"command not found: {command}"
+            log.warning("Command not found for %s: %s", server_name, command)
+            continue
+        except Exception as exc:
+            failed_servers[server_name] = str(exc)
+            log.warning("Failed to query %s: %s", server_name, exc)
+            continue
+
+        # Build catalog entry for this server
+        entries: list[dict] = []
+        for td in tool_defs:
+            token_count = count_schema_tokens(td)
+            entries.append({
+                "name": td["name"],
+                "schema_tokens": token_count,
+            })
+
+        if entries:
+            catalog[server_name] = entries
+            log.info("  -> %s: %d tools, %d total schema tokens",
+                      server_name, len(entries), sum(e["schema_tokens"] for e in entries))
+        else:
+            catalog[server_name] = []
+            log.info("  -> %s: 0 tools (empty list)", server_name)
+
+    return catalog
+
+
+def refresh_schema_catalog(output_path: Path | None = None) -> dict[str, list[dict]]:
+    """Refresh schema catalog by querying MCP servers.
+
+    Attempts to call list_tools on each configured MCP server.
+    Returns the catalog dict that was written.
+
+    The caller can inspect the return value to determine success:
+    an empty dict means all servers failed, no servers configured,
+    or no .mcp.json was found.
+    """
+    target = output_path or _DEFAULT_CATALOG_PATH
+
+    # Try to import FastMCP client to query servers
+    try:
+        from fastmcp import Client as _FastMCPClient  # noqa: F401  -- existence check
+    except ImportError:
+        log.warning("FastMCP not available for schema refresh. Using empty catalog.")
+        _write_catalog(target, {})
+        return {}
+
+    # Locate .mcp.json (workspace-first, then user home fallback)
+    mcp_config_path = _find_mcp_config()
+    if mcp_config_path is None:
+        log.warning("No .mcp.json found (searched cwd, parents, and ~/.claude/)")
+        _write_catalog(target, {})
+        return {}
+
+    try:
+        with open(mcp_config_path, encoding="utf-8") as f:
+            config = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning("Failed to parse %s: %s", mcp_config_path, e)
+        _write_catalog(target, {})
+        return {}
+
+    servers_config = config.get("mcpServers", {})
+    if not servers_config:
+        log.warning("No mcpServers found in %s", mcp_config_path)
+        _write_catalog(target, {})
+        return {}
+
+    failed_servers: dict[str, str] = {}
+
+    try:
+        loop = asyncio.get_running_loop()
+        # Already in an async context — run_until_complete on the current loop
+        # would block the running loop. Fall back to a sync no-op with warning.
+        log.warning("Cannot run --refresh-schemas from within an async context. "
+                     "This command must be called from a synchronous entry point.")
+        _write_catalog(target, {})
+        return {}
+    except RuntimeError:
+        # No running event loop — safe to call asyncio.run()
+        catalog = asyncio.run(_refresh_all_servers(servers_config, failed_servers))
+
+    _write_catalog(target, catalog)
+
+    # Log summary
+    total = len(servers_config)
+    succeeded = len(catalog)
+    skipped = sum(1 for s in servers_config if _is_self_server(
+        s, servers_config[s].get("command", ""), servers_config[s].get("args", []),
+    ))
+    if failed_servers:
+        log.info("Failed servers (%d):", len(failed_servers))
+        for s, err in failed_servers.items():
+            log.info("  %s — %s", s, err)
+
+    if succeeded == 0:
+        log.warning("Refresh failed for all %d servers.", total)
+    else:
+        log.info("Refresh succeeded for %d/%d servers.", succeeded, total)
+
+    return catalog
 
 
 def load_catalog(path: Path | None = None) -> dict[str, list[SchemaEntry]]:
@@ -146,64 +390,6 @@ def count_schema_tokens(tool_def: dict) -> int:
     if params:
         parts.append(json.dumps(params))
     return estimate_tokens(" ".join(parts))
-
-
-def refresh_schema_catalog(output_path: Path | None = None) -> dict[str, list[dict]]:
-    """Refresh schema catalog by querying MCP servers.
-
-    Attempts to call list_tools on each configured MCP server.
-    Returns the catalog dict that was written.
-    """
-    target = output_path or _DEFAULT_CATALOG_PATH
-
-    # Try to import FastMCP client to query servers
-    try:
-        from fastmcp import Client
-    except ImportError:
-        log.warning("FastMCP not available for schema refresh. Using empty catalog.")
-        _write_catalog(target, {})
-        return {}
-
-    # Read MCP config to find servers
-    mcp_config_path = Path.home() / ".claude" / ".mcp.json"
-    if not mcp_config_path.exists():
-        log.warning("No .mcp.json found at %s", mcp_config_path)
-        _write_catalog(target, {})
-        return {}
-
-    try:
-        with open(mcp_config_path, encoding="utf-8") as f:
-            config = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        log.warning("Failed to parse .mcp.json")
-        _write_catalog(target, {})
-        return {}
-
-    servers_config = config.get("mcpServers", {})
-    catalog: dict[str, list[dict]] = {}
-
-    for server_name, server_conf in servers_config.items():
-        if server_name == "mcp-audit":
-            continue  # Don't query ourselves
-
-        try:
-            # Try to connect and list tools
-            command = server_conf.get("command", "")
-            args = server_conf.get("args", [])
-            if not command:
-                continue
-
-            # For stdio servers, spawn the process
-            # This is a best-effort approach — some servers may not be available
-            log.info("Querying %s for tool schemas...", server_name)
-            # Note: actual MCP client connection is async and complex.
-            # For v1, we log the intent and skip actual querying.
-            # The catalog should be populated manually or via a dedicated script.
-        except Exception as e:
-            log.warning("Failed to query %s: %s", server_name, e)
-
-    _write_catalog(target, catalog)
-    return catalog
 
 
 def _write_catalog(path: Path, catalog: dict[str, list[dict]]) -> None:

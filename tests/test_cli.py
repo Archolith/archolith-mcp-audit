@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from archolith_mcp_audit.cli import main
 
@@ -87,9 +89,49 @@ class TestCliSchemaRefresh:
     """Test --refresh-schemas mode."""
 
     def test_refresh_exits_0(self) -> None:
-        """Schema refresh mode exits 0."""
-        exit_code = main(["--refresh-schemas"])
-        assert exit_code == 0
+        """Schema refresh with servers succeeds exits 0."""
+        with patch(
+            "archolith_mcp_audit.schema_estimator.refresh_schema_catalog",
+            return_value={"gradle": [{"name": "gradle_compile", "schema_tokens": 250}]},
+        ):
+            exit_code = main(["--refresh-schemas"])
+            assert exit_code == 0
+
+    def test_refresh_all_fail_exits_1(self) -> None:
+        """Schema refresh with all servers failing exits 1."""
+        with patch(
+            "archolith_mcp_audit.schema_estimator.refresh_schema_catalog",
+            return_value={},
+        ):
+            exit_code = main(["--refresh-schemas"])
+            assert exit_code == 1
+
+    def test_refresh_with_results_shows_summary(self, capsys) -> None:
+        """Refresh with results prints server summary."""
+        with patch(
+            "archolith_mcp_audit.schema_estimator.refresh_schema_catalog",
+            return_value={
+                "gradle": [{"name": "gradle_compile", "schema_tokens": 250}],
+                "vps": [{"name": "vps_status", "schema_tokens": 180}],
+                "memory": [{"name": "query_structure", "schema_tokens": 300}],
+            },
+        ):
+            exit_code = main(["--refresh-schemas"])
+            captured = capsys.readouterr()
+            assert exit_code == 0
+            assert "3 servers: gradle, memory, vps" in captured.out
+
+    def test_refresh_all_fail_shows_error(self, capsys) -> None:
+        """Refresh with all failures prints error to stderr."""
+        with patch(
+            "archolith_mcp_audit.schema_estimator.refresh_schema_catalog",
+            return_value={},
+        ):
+            exit_code = main(["--refresh-schemas"])
+            captured = capsys.readouterr()
+            assert exit_code == 1
+            assert "Error" in captured.err
+            assert "failed" in captured.err
 
 
 class TestCliNoSources:

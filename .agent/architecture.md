@@ -6,6 +6,40 @@ MCP token usage audit system. Scans LLM session logs (Claude JSONL, Codex JSONL,
 
 **Design principle**: This is a diagnostic tool, not a proxy. It measures and reports. It does NOT intercept, compress, or modify MCP traffic. The goal is to drive server-side fixes, not add a permanent middleware layer.
 
+## Schema Refresh
+
+The `--refresh-schemas` CLI command populates `data/schema_catalog.json` with
+real tool definitions from MCP servers. It works via FastMCP's `Client` class
+over stdio subprocess communication.
+
+### Flow
+
+1. `refresh_schema_catalog()` in `schema_estimator.py` is called from `cli.py`.
+2. It locates `.mcp.json` (CWD-first, then ~/.claude/ fallback).
+3. For each configured server (sequential, not concurrent):
+   a. Check self-exclusion via `_is_self_server()` — skip archolith-audit.
+   b. Skip entries without a `command` field (SSE/HTTP-only servers).
+   c. Call `_query_server_via_fastmcp()` which wraps FastMCP `Client`:
+      - FastMCP handles the full protocol internally: spawn subprocess,
+        JSON-RPC initialize, `notifications/initialized`, `tools/list` (with
+        pagination), and graceful close.
+      - 15-second `asyncio.wait_for()` timeout per server.
+      - On failure, the server is recorded in `failed_servers` dict.
+4. Tool definitions are run through `count_schema_tokens()` and stored.
+5. Catalog is written to `schema_catalog.json` via `_write_catalog()`.
+
+### Self-exclusion
+
+`_is_self_server(name, command, args)` returns True if:
+- Server name is `"archolith-audit"`, or
+- Command is a Python interpreter AND any arg contains `"archolith_mcp_audit"`
+
+### Configuration search order
+
+1. CWD (current working directory)
+2. Parent directories up to filesystem root
+3. `~/.claude/.mcp.json` (user-level fallback)
+
 ## Tech Stack
 
 | Layer | Technology |

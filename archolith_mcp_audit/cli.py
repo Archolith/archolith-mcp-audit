@@ -115,9 +115,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.refresh_schemas:
         from archolith_mcp_audit.schema_estimator import refresh_schema_catalog
         catalog = refresh_schema_catalog()
-        servers = list(catalog.keys()) if catalog else []
-        print(f"Schema catalog refreshed. {len(servers)} servers: {', '.join(servers) if servers else 'none'}")
-        return 0
+        servers = list(catalog.keys())
+
+        if servers:
+            print(f"Schema catalog refreshed. {len(servers)} servers: {', '.join(sorted(servers))}")
+            return 0
+        else:
+            print("Error: schema refresh failed for all servers. Check .mcp.json and server availability.",
+                  file=sys.stderr)
+            return 1
 
     # Comparison mode
     if args.compare:

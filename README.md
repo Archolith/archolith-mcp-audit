@@ -56,6 +56,46 @@ archolith-audit --claude <path> --ci --max-server-share 20 --max-total-mcp-share
 archolith-audit --compare before.json after.json
 ```
 
+### `--refresh-schemas`
+
+Refresh the tool schema catalog by querying each MCP server configured in your
+`.mcp.json` via the FastMCP Client protocol. Requires the `fastmcp` package
+(already installed as a dependency).
+
+```bash
+archolith-audit --refresh-schemas
+```
+
+This writes the catalog to `data/schema_catalog.json`. The tool locates
+`.mcp.json` by searching the current working directory, then parent
+directories, then `~/.claude/.mcp.json` as a fallback.
+
+**Exit codes:**
+- `0` — catalog refreshed for one or more servers (partial success is success)
+- `1` — all servers failed, or no `.mcp.json` found
+
+**Behavior details:**
+- Only stdio-transport servers (those with a `command` field) are queried.
+  SSE/HTTP servers are skipped with a warning.
+- Each server has a 15-second timeout. Failed servers are logged and do not
+  block remaining servers.
+- The `archolith-audit` server itself is automatically excluded from refresh.
+- Run `--refresh-schemas` after adding or updating MCP servers.
+
+**Example:**
+```
+$ archolith-audit --refresh-schemas
+Schema catalog refreshed. 7 servers: delegate, gradle, memory, plannerific, proton, sage-wiki, workspace-artifacts
+```
+
+**On all-failure:**
+```
+$ archolith-audit --refresh-schemas
+Error: schema refresh failed for all servers. Check .mcp.json and server availability.
+$ echo $?
+1
+```
+
 ## In-session MCP tools
 
 When running as an MCP server, exposes three tools for real-time token budget visibility:

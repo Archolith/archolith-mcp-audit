@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from archolith_mcp_audit.schema_estimator import (
     ServerSchemaCost,
     SchemaEntry,
+    _is_self_server,
     compute_all_schema_costs,
     count_schema_tokens,
     estimate_server_schema_cost,
     load_catalog,
+    refresh_schema_catalog,
 )
 
 
@@ -169,3 +173,199 @@ class TestServerSchemaCost:
         cost.compute(total_turns=20)
         assert cost.per_turn_cost == 500
         assert cost.session_cost == 10_000
+
+
+class TestIsSelfServer:
+    """Tests for _is_self_server()."""
+
+    def test_match_by_name(self) -> None:
+        """Name 'archolith-audit' matches unconditionally."""
+        assert _is_self_server("archolith-audit", "node", ["server.js"])
+
+    def test_match_by_command_pattern_python(self) -> None:
+        """Python interpreter + archolith_mcp_audit arg matches."""
+        assert _is_self_server(
+            "gradle", "python", ["-m", "archolith_mcp_audit.mcp_server"]
+        )
+
+    def test_match_by_command_pattern_python3(self) -> None:
+        """python3 interpreter also matches."""
+        assert _is_self_server(
+            "gradle", "python3", ["-m", "archolith_mcp_audit"]
+        )
+
+    def test_no_match_unrelated_server(self) -> None:
+        """Unrelated server with no archolith_mcp_audit arg does not match."""
+        assert not _is_self_server("vps", "node", ["vps-server.js"])
+
+    def test_no_match_python_but_different_module(self) -> None:
+        """Python interpreter without archolith_mcp_audit arg does not match."""
+        assert not _is_self_server("gradle", "python", ["-m", "gradle_mcp"])
+
+    def test_no_match_name_similar(self) -> None:
+        """Name containing similar text does not match."""
+        assert not _is_self_server("mcp-audit", "node", ["server.js"])
+
+    def test_empty_args(self) -> None:
+        """Empty args list does not cause false positive."""
+        assert not _is_self_server("gradle", "node", [])
+
+    def test_command_with_exe_suffix(self) -> None:
+        """python.exe with archolith_mcp_audit arg matches."""
+        assert _is_self_server(
+            "gradle", "python.exe", ["-m", "archolith_mcp_audit.cli"]
+        )
+
+
+class TestRefreshSchemaCatalog:
+    """Mock-based tests for refresh_schema_catalog()."""
+
+    @staticmethod
+    def _make_mcp_config(servers: dict | None = None) -> Path:
+        """Create a temp .mcp.json and return its path."""
+        data = {
+            "mcpServers": servers or {
+                "gradle": {"command": "python", "args": ["-m", "gradle_mcp"]},
+                "vps": {"command": "node", "args": ["vps-server.js"]},
+                "archolith-audit": {"command": "python", "args": ["-m", "archolith_mcp_audit.mcp_server"]},
+                "sse-server": {"url": "http://localhost:9999/sse"},
+            }
+        }
+        config_dir = Path(tempfile.mkdtemp())
+        config_path = config_dir / ".mcp.json"
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return config_path
+
+    @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
+    @patch("archolith_mcp_audit.schema_estimator._refresh_all_servers")
+    @patch("archolith_mcp_audit.schema_estimator._write_catalog")
+    def test_all_servers_succeed(
+        self,
+        mock_write: AsyncMock,
+        mock_refresh: AsyncMock,
+        mock_find: AsyncMock,
+    ) -> None:
+        """All servers succeed → catalog written with all tools."""
+        import asyncio
+
+        with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
+            config_path = self._make_mcp_config()
+            mock_find.return_value = config_path
+            mock_refresh.return_value = {
+                "gradle": [{"name": "gradle_compile", "schema_tokens": 250}],
+                "vps": [{"name": "vps_status", "schema_tokens": 180}],
+            }
+
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+                output_path = Path(f.name)
+
+            try:
+                catalog = refresh_schema_catalog(output_path)
+                assert "gradle" in catalog
+                assert "vps" in catalog
+                assert "archolith-audit" not in catalog  # self-excluded
+                assert catalog["gradle"][0]["schema_tokens"] == 250
+            finally:
+                output_path.unlink(missing_ok=True)
+                import shutil
+                shutil.rmtree(config_path.parent, ignore_errors=True)
+
+    @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
+    @patch("archolith_mcp_audit.schema_estimator._refresh_all_servers")
+    @patch("archolith_mcp_audit.schema_estimator._write_catalog")
+    def test_partial_failure(
+        self,
+        mock_write: AsyncMock,
+        mock_refresh: AsyncMock,
+        mock_find: AsyncMock,
+    ) -> None:
+        """Some servers fail → partial catalog, no exception."""
+        import asyncio
+
+        with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
+            config_path = self._make_mcp_config()
+            mock_find.return_value = config_path
+            mock_refresh.return_value = {
+                "gradle": [{"name": "gradle_compile", "schema_tokens": 250}],
+            }
+
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+                output_path = Path(f.name)
+
+            try:
+                catalog = refresh_schema_catalog(output_path)
+                assert "gradle" in catalog
+                assert "vps" not in catalog
+            finally:
+                output_path.unlink(missing_ok=True)
+                import shutil
+                shutil.rmtree(config_path.parent, ignore_errors=True)
+
+    @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
+    @patch("archolith_mcp_audit.schema_estimator._refresh_all_servers")
+    @patch("archolith_mcp_audit.schema_estimator._write_catalog")
+    def test_all_fail(
+        self,
+        mock_write: AsyncMock,
+        mock_refresh: AsyncMock,
+        mock_find: AsyncMock,
+    ) -> None:
+        """All servers fail → empty catalog."""
+        import asyncio
+
+        with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
+            config_path = self._make_mcp_config()
+            mock_find.return_value = config_path
+            mock_refresh.return_value = {}
+
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+                output_path = Path(f.name)
+
+            try:
+                catalog = refresh_schema_catalog(output_path)
+                assert catalog == {}
+            finally:
+                output_path.unlink(missing_ok=True)
+                import shutil
+                shutil.rmtree(config_path.parent, ignore_errors=True)
+
+    @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
+    @patch("archolith_mcp_audit.schema_estimator._write_catalog")
+    def test_no_mcp_config(self, mock_write: AsyncMock, mock_find: AsyncMock) -> None:
+        """No .mcp.json found → empty catalog, no crash."""
+        mock_find.return_value = None
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            output_path = Path(f.name)
+
+        try:
+            catalog = refresh_schema_catalog(output_path)
+            assert catalog == {}
+        finally:
+            output_path.unlink(missing_ok=True)
+
+    @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
+    def test_self_exclusion_by_name(self, mock_find: AsyncMock) -> None:
+        """Self-exclusion by name: archolith-audit not in result."""
+        import asyncio
+
+        with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
+            config_path = self._make_mcp_config({
+                "archolith-audit": {
+                    "command": "python",
+                    "args": ["-m", "archolith_mcp_audit.mcp_server"],
+                },
+            })
+            mock_find.return_value = config_path
+
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+                output_path = Path(f.name)
+
+            try:
+                catalog = refresh_schema_catalog(output_path)
+                assert catalog == {}
+            finally:
+                output_path.unlink(missing_ok=True)
+                import shutil
+                shutil.rmtree(config_path.parent, ignore_errors=True)
