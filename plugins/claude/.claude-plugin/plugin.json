@@ -1,11 +1,11 @@
 {
   "name": "archolith-audit",
   "version": "0.1.0",
-  "description": "Live MCP token usage audit. Tracks per-server token spend and waste patterns in real time.",
+  "description": "See exactly how much of your context window each MCP server is consuming. Tracks per-server token spend, detects waste patterns (polling loops, oversized results, redundant fields), and surfaces concrete optimization suggestions — live, during every Claude Code session.",
   "author": {
     "name": "archolith"
   },
-  "homepage": "https://github.com/Archolith/archolith-audit-plugin-claude",
+  "homepage": "https://archolith.dev",
   "repository": "https://github.com/Archolith/archolith-audit-plugin-claude",
   "license": "MIT",
   "keywords": ["mcp", "audit", "tokens", "telemetry"],
