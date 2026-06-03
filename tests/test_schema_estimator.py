@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from archolith_mcp_audit.schema_estimator import (
-    ServerSchemaCost,
     SchemaEntry,
+    ServerSchemaCost,
     _is_self_server,
     compute_all_schema_costs,
     count_schema_tokens,
@@ -261,11 +260,11 @@ class TestRefreshSchemaCatalog:
                 output_path = Path(f.name)
 
             try:
-                catalog = refresh_schema_catalog(output_path)
-                assert "gradle" in catalog
-                assert "vps" in catalog
-                assert "archolith-audit" not in catalog  # self-excluded
-                assert catalog["gradle"][0]["schema_tokens"] == 250
+                result = refresh_schema_catalog(output_path)
+                assert "gradle" in result.catalog
+                assert "vps" in result.catalog
+                assert "archolith-audit" not in result.catalog  # self-excluded
+                assert result.catalog["gradle"][0]["schema_tokens"] == 250
             finally:
                 output_path.unlink(missing_ok=True)
                 import shutil
@@ -294,9 +293,9 @@ class TestRefreshSchemaCatalog:
                 output_path = Path(f.name)
 
             try:
-                catalog = refresh_schema_catalog(output_path)
-                assert "gradle" in catalog
-                assert "vps" not in catalog
+                result = refresh_schema_catalog(output_path)
+                assert "gradle" in result.catalog
+                assert "vps" not in result.catalog
             finally:
                 output_path.unlink(missing_ok=True)
                 import shutil
@@ -323,8 +322,8 @@ class TestRefreshSchemaCatalog:
                 output_path = Path(f.name)
 
             try:
-                catalog = refresh_schema_catalog(output_path)
-                assert catalog == {}
+                result = refresh_schema_catalog(output_path)
+                assert result.catalog == {}
             finally:
                 output_path.unlink(missing_ok=True)
                 import shutil
@@ -340,8 +339,8 @@ class TestRefreshSchemaCatalog:
             output_path = Path(f.name)
 
         try:
-            catalog = refresh_schema_catalog(output_path)
-            assert catalog == {}
+            result = refresh_schema_catalog(output_path)
+            assert result.catalog == {}
         finally:
             output_path.unlink(missing_ok=True)
 
@@ -363,8 +362,57 @@ class TestRefreshSchemaCatalog:
                 output_path = Path(f.name)
 
             try:
-                catalog = refresh_schema_catalog(output_path)
-                assert catalog == {}
+                result = refresh_schema_catalog(output_path)
+                assert result.catalog == {}
+            finally:
+                output_path.unlink(missing_ok=True)
+                import shutil
+                shutil.rmtree(config_path.parent, ignore_errors=True)
+
+    @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
+    def test_self_exclusion_by_command_pattern(self, mock_find: AsyncMock) -> None:
+        """Self-exclusion by command pattern: python + archolith_mcp_audit arg skipped regardless of name."""
+        import asyncio
+
+        with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
+            config_path = self._make_mcp_config({
+                "some-other-name": {
+                    "command": "python",
+                    "args": ["-m", "archolith_mcp_audit.mcp_server"],
+                },
+            })
+            mock_find.return_value = config_path
+
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+                output_path = Path(f.name)
+
+            try:
+                result = refresh_schema_catalog(output_path)
+                assert result.catalog == {}
+                assert "some-other-name" not in result.catalog
+            finally:
+                output_path.unlink(missing_ok=True)
+                import shutil
+                shutil.rmtree(config_path.parent, ignore_errors=True)
+
+    @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
+    def test_sse_server_skipped(self, mock_find: AsyncMock) -> None:
+        """SSE/HTTP server (no command field) is skipped gracefully — not in catalog or failed_servers."""
+        import asyncio
+
+        with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
+            config_path = self._make_mcp_config({
+                "sse-server": {"url": "http://localhost:9999/sse"},
+            })
+            mock_find.return_value = config_path
+
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+                output_path = Path(f.name)
+
+            try:
+                result = refresh_schema_catalog(output_path)
+                assert result.catalog == {}
+                assert "sse-server" not in result.failed_servers
             finally:
                 output_path.unlink(missing_ok=True)
                 import shutil
