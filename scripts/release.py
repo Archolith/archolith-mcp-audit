@@ -48,6 +48,7 @@ EXCLUDE = {"__pycache__", ".pyc"}
 ADAPTER_FILES: dict[str, list[str]] = {
     "claude": [
         ".claude-plugin/plugin.json",
+        ".claude-plugin/marketplace.json",
         ".gitattributes",
         ".gitignore",
         "hooks/hooks.json",
