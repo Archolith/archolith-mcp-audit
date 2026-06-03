@@ -1,0 +1,23 @@
+{
+  "name": "archolith-audit",
+  "version": "0.1.0",
+  "description": "Live MCP token usage audit. Tracks per-server token spend and waste patterns in real time.",
+  "author": {
+    "name": "archolith"
+  },
+  "homepage": "https://github.com/Archolith/archolith-audit-plugin-claude",
+  "repository": "https://github.com/Archolith/archolith-audit-plugin-claude",
+  "license": "MIT",
+  "keywords": ["mcp", "audit", "tokens", "telemetry"],
+  "mcpServers": {
+    "archolith-audit": {
+      "command": "python",
+      "args": ["-m", "archolith_mcp_audit.mcp_server"],
+      "env": {
+        "MCP_AUDIT_ENABLED": "1",
+        "MCP_AUDIT_SESSION_ID": "${CLAUDE_SESSION_ID}",
+        "PYTHONPATH": "${CLAUDE_PLUGIN_ROOT}"
+      }
+    }
+  }
+}

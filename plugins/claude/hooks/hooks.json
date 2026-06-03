@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hook_observer.py\" ${CLAUDE_SESSION_ID}",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
