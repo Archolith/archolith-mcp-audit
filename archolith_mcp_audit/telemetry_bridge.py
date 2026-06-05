@@ -4,7 +4,7 @@ Provides a uniform interface for feeding tool result observations into the
 LiveAccumulator from multiple telemetry backends:
 
   1. RTK FilterTelemetryStore — the primary in-session telemetry source
-     when archolith-rtk is installed and the filter pipeline is active.
+     when archolith-filter is installed and the filter pipeline is active.
   2. File-based telemetry — reads accumulated observations from a JSONL
      file written by an external process (e.g., a hook observer).
   3. Direct push — programmatic injection of observations from a hook
@@ -61,7 +61,7 @@ class TelemetryEntry:
 
 
 class RtkTelemetrySource:
-    """Telemetry source backed by archolith-rtk FilterTelemetryStore.
+    """Telemetry source backed by archolith-filter FilterTelemetryStore.
 
     Reads from the RTK filter telemetry store when available.
     Gracefully degrades when RTK is not installed.
@@ -75,12 +75,12 @@ class RtkTelemetrySource:
 
     def _try_connect(self) -> None:
         try:
-            from archolith_rtk.telemetry import FilterTelemetryStore
+            from archolith_filter.telemetry import FilterTelemetryStore
             self._store = FilterTelemetryStore()
             self._available = True
             log.info("Connected to RTK FilterTelemetryStore")
         except ImportError:
-            log.debug("archolith-rtk not installed, RTK telemetry unavailable")
+            log.debug("archolith-filter not installed, RTK telemetry unavailable")
             self._available = False
         except Exception as e:
             log.warning("Failed to connect to RTK FilterTelemetryStore: %s", e)
@@ -112,10 +112,36 @@ class RtkTelemetrySource:
                 new_records = list(records)
                 self._last_index = len(new_records)
 
+            warned_fallback = {"tool_name": False, "raw_chars": False, "filtered_chars": False}
+
             for rec in new_records:
-                tool_name = getattr(rec, "tool_name", getattr(rec, "tool", "unknown"))
-                raw_chars = getattr(rec, "raw_chars", 0)
-                filtered_chars = getattr(rec, "filtered_chars", 0)
+                tool_name = getattr(rec, "tool_name", None)
+                if tool_name is None:
+                    tool_name = getattr(rec, "tool", "unknown")
+                    if not warned_fallback["tool_name"]:
+                        log.warning("RTK record missing 'tool_name', falling back to 'tool': '%s'", tool_name)
+                        warned_fallback["tool_name"] = True
+
+                raw_chars = getattr(rec, "raw_chars", None)
+                if raw_chars is None:
+                    raw_chars = getattr(rec, "raw_tokens", 0)
+                    if not warned_fallback["raw_chars"]:
+                        log.warning(
+                            "RTK record missing 'raw_chars', falling back to 'raw_tokens': %s",
+                            raw_chars,
+                        )
+                        warned_fallback["raw_chars"] = True
+
+                filtered_chars = getattr(rec, "filtered_chars", None)
+                if filtered_chars is None:
+                    filtered_chars = getattr(rec, "filtered_tokens", 0)
+                    if not warned_fallback["filtered_chars"]:
+                        log.warning(
+                            "RTK record missing 'filtered_chars', falling back to 'filtered_tokens': %s",
+                            filtered_chars,
+                        )
+                        warned_fallback["filtered_chars"] = True
+
                 timestamp = getattr(rec, "timestamp", 0.0)
 
                 entries.append(TelemetryEntry(
