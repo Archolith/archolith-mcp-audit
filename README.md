@@ -19,6 +19,17 @@ python -m archolith_mcp_audit --refresh-schemas
 python -m archolith_mcp_audit --claude <path> --ci --max-server-share 20 --max-total-mcp-share 40
 ```
 
+## In-Session MCP Tools
+
+When `MCP_AUDIT_ENABLED=1`, the audit server exposes four tools for real-time monitoring:
+
+| Tool | Purpose | Output size |
+|------|---------|-----------|
+| `mcp_audit_summary` | Per-server token share across all active sessions | ~300 tokens |
+| `mcp_audit_detail` | Deep dive on a specific server with waste findings | ~200-500 tokens |
+| `mcp_audit_check` | Threshold pass/fail check (configurable limits) | ~50-150 tokens |
+| `mcp_audit_bridge_status` | Telemetry bridge status and observation count | ~50 tokens |
+
 ## Documentation
 
 | File | Purpose |

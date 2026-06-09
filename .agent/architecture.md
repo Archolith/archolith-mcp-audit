@@ -141,7 +141,7 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 | `report.py` | Report card generation (text, JSON, markdown) |
 | `schema_estimator.py` | MCP tool schema token cost in system prompt |
 | `comparator.py` | Before/after comparison mode |
-| `mcp_server.py` | In-session MCP audit tool (summary/detail/check/bridge_status) |
+| `mcp_server.py` | In-session MCP audit server (four tools: summary, detail, check, bridge_status) |
 | `accumulator.py` | Live per-session token accumulator (reads archolith-filter telemetry) |
 | `telemetry_bridge.py` | Connects telemetry sources (archolith-filter, file, in-memory) to accumulator |
 | `hook_observer.py` | Base hook observer interface |
@@ -173,7 +173,8 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 | `MCP_AUDIT_MAX_SHARE` | CI: max per-server token share (%) | 20 |
 | `MCP_AUDIT_MAX_TOTAL_MCP` | CI: max total MCP share (%) | 40 |
 | `MCP_AUDIT_MAX_WASTE_PCT` | CI: max waste per server (%) | 50 |
-| `MCP_AUDIT_RTK` | Connect to archolith-filter FilterTelemetryStore | 0 (disabled) |
+| `MCP_AUDIT_FILTER` | Connect to archolith-filter FilterTelemetryStore | 0 (disabled) |
+| `MCP_AUDIT_RTK` | Legacy alias for `MCP_AUDIT_FILTER` | 0 (disabled) |
 | `MCP_AUDIT_TELEMETRY_FILE` | Path to JSONL telemetry file | (none) |
 
 ## External Dependencies

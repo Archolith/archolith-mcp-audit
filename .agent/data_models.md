@@ -158,7 +158,7 @@ Full session audit report.
 
 ### ServerDelta
 
-Before/after comparison for a single server.
+Before/after comparison for a single server (from `comparator.py`).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -173,8 +173,8 @@ Before/after comparison for a single server.
 | `waste_change_pct` | `float` | Percentage waste change |
 | `before_calls` | `int` | Tool call count before |
 | `after_calls` | `int` | Tool call count after |
-| `new_waste_types` | `list[str]` | Waste patterns introduced in after |
-| `resolved_waste_types` | `list[str]` | Waste patterns eliminated in after |
+| `new_waste_types` | `list[str] \| None` | Waste patterns introduced in after |
+| `resolved_waste_types` | `list[str] \| None` | Waste patterns eliminated in after |
 | `status` | `str` | One of: `improved`, `regressed`, `no_change`, `new`, `removed` |
 
 ## Enums
