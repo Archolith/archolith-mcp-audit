@@ -31,10 +31,18 @@ async function main() {
 
   const dir = path.join(os.homedir(), ".archolith", "sessions");
   fs.mkdirSync(dir, { recursive: true });
+  // Match the schema FileTelemetrySource.pull() expects. Token counts are
+  // unavailable in the Gemini hook context, so raw/filtered tokens are 0 and
+  // char counts carry the signal. timestamp is epoch seconds to match
+  // Python's time.time().
   const entry = JSON.stringify({
-    tool: toolName,
-    chars,
-    ts: new Date().toISOString(),
+    tool_name: toolName,
+    raw_tokens: 0,
+    raw_chars: chars,
+    filtered_tokens: 0,
+    filtered_chars: chars,
+    timestamp: Date.now() / 1000,
+    session_id: sessionId,
   });
 
   try {

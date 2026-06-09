@@ -12,6 +12,7 @@ per-hour key (codex-<hour>) for reasonable session grouping.
 
 import json
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -32,10 +33,17 @@ def main() -> None:
     sessions_dir = Path.home() / ".archolith" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
+    # Match the schema FileTelemetrySource.pull() expects. Token counts are
+    # unavailable in the standalone Codex hook context (no tiktoken guarantee),
+    # so raw/filtered tokens are 0 and char counts carry the signal.
     entry = json.dumps({
-        "tool": tool_name,
-        "chars": chars,
-        "ts": datetime.now(UTC).isoformat(),
+        "tool_name": tool_name,
+        "raw_tokens": 0,
+        "raw_chars": chars,
+        "filtered_tokens": 0,
+        "filtered_chars": chars,
+        "timestamp": time.time(),
+        "session_id": session_id,
     })
 
     try:
