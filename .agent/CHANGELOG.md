@@ -1,5 +1,26 @@
 # Changelog — archolith-audit
 
+## 2026-06-08 — audit-remediation closeout + plugin telemetry schema fix
+
+- Completed the remaining items of `archolith-mcp-audit-remediation-plan` after a
+  WIP checkpoint had already landed Phases 1-4, 6.1, 7.1/7.2/7.6/7.8/7.9/7.10, 8:
+  added `__all__` to the public modules and extractors (with
+  `extract_{claude,codex,opencode}_session` re-exports), renamed the product to
+  `archolith-audit` in `schema_estimator` docstrings and LLM instruction headers,
+  and swept the last stale `RTK` references in current docs to `archolith-filter`
+  (env table now lists `MCP_AUDIT_FILTER` preferred, `MCP_AUDIT_RTK` legacy alias).
+- Won't-fix (documented): `SESSIONS_DIR` dedup (7.7) and envelope-overhead helper
+  dedup (7.4). The standalone hooks are intentionally zero-package-import and
+  copied into each plugin bundle; `_extract_payload_from_json` is already shared.
+- Plugin telemetry fix: the Codex, Gemini, and OpenCode hook adapters wrote a
+  compact `{"tool","chars","ts"}` object that `FileTelemetrySource` silently
+  misparsed; all three now emit the canonical `tool_name/raw_*/filtered_*/`
+  `timestamp/session_id` schema (verified end-to-end through `FileTelemetrySource`).
+- Added `PLUGIN_STATUS.md` and `.agent/workflows/plugin_runtime_verification.md`
+  (step-by-step live-agent verification checklist).
+- Verification: `ruff check archolith_mcp_audit tests` PASS; `pytest tests/ -q`
+  PASS (175/175). `pyright` NOT RUN (not installed).
+
 ## 2026-06-02 — remediation follow-up: refresh contract and verification closeout
 
 - Added real FastMCP-path refresh tests in `tests/test_schema_estimator.py` for success, partial failure, and all-fail scenarios, replacing the prior `_refresh_all_servers`-only coverage gap.
