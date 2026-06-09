@@ -147,6 +147,7 @@ class TestConditionalEnablement:
             os.environ.pop("MCP_AUDIT_ENABLED", None)
             # Re-import to pick up env var
             import importlib
+
             import archolith_mcp_audit.mcp_server as ms
             importlib.reload(ms)
 

@@ -43,6 +43,12 @@ except Exception:
     def _count_tokens(text: str) -> int:  # type: ignore[misc]
         return max(1, len(text) // 4)
 
+# NOTE: tiktoken import code is duplicated from tokenizer.py rather than
+# imported, because this file is designed to work as a standalone hook observer
+# with zero package dependencies. It's installed into agent hook directories
+# where the archolith_mcp_audit package may not be importable. If the package
+# layout changes, keep this self-contained.
+
 
 # ---------------------------------------------------------------------------
 # Main
@@ -96,7 +102,7 @@ def main() -> None:
             "filtered_tokens": tokens,   # passthrough — 0% savings
             "filtered_chars": chars,
             "tiktoken_used": _enc is not None,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).timestamp(),
+            "timestamp": datetime.datetime.now(datetime.UTC).timestamp(),
             "session_id": session_id,
         })
         with open(SESSIONS_DIR / f"{session_id}.jsonl", "a", encoding="utf-8") as f:

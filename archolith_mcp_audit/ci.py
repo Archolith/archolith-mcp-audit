@@ -6,8 +6,6 @@ code 2 if any threshold is exceeded. Designed for CI pipelines.
 
 from __future__ import annotations
 
-import sys
-
 from archolith_mcp_audit.report import AuditReport
 
 

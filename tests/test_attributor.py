@@ -1,6 +1,6 @@
 """Tests for attributor module."""
 
-from archolith_mcp_audit.attributor import attribute_tool, attribute_results
+from archolith_mcp_audit.attributor import attribute_results, attribute_tool
 
 
 class TestAttributeTool:

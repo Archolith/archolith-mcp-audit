@@ -1,13 +1,18 @@
-"""CLI entry point for archolith-mcp-audit."""
+"""CLI entry point for archolith-audit."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
-from archolith_mcp_audit.attributor import _load_mapping
+__all__ = [
+    "main",
+]
+
+from archolith_mcp_audit.attributor import load_mapping
 from archolith_mcp_audit.report import (
     AuditReport,
     build_report,
@@ -34,13 +39,24 @@ def _resolve_sources(args: argparse.Namespace) -> list[tuple[str, str]]:
         sources.append(("opencode", args.opencode))
 
     if args.all:
-        claude_dir = Path(r"C:\Users\thron\.claude\projects\C--Users-thron-IdeaProjects")
-        codex_dir = Path(r"C:\Users\thron\.codex\sessions")
-        opencode_db = Path(r"C:\Users\thron\.local\share\opencode\opencode.db")
+        claude_dir = Path(os.environ.get(
+            "CLAUDE_PROJECTS_DIR",
+            str(Path.home() / ".claude" / "projects"),
+        ))
+        codex_dir = Path(os.environ.get(
+            "CODEX_SESSIONS_DIR",
+            str(Path.home() / ".codex" / "sessions"),
+        ))
+        opencode_db = Path(os.environ.get(
+            "OPENCODE_DB",
+            str(Path.home() / ".local" / "share" / "opencode" / "opencode.db"),
+        ))
 
         if claude_dir.exists():
-            for p in sorted(claude_dir.glob("*.jsonl")):
-                sources.append(("claude", str(p)))
+            for project_dir in sorted(claude_dir.iterdir()):
+                if project_dir.is_dir():
+                    for p in sorted(project_dir.glob("*.jsonl")):
+                        sources.append(("claude", str(p)))
 
         if codex_dir.exists():
             for p in sorted(codex_dir.rglob("*.jsonl")):
@@ -114,15 +130,31 @@ def main(argv: list[str] | None = None) -> int:
     # Schema refresh mode
     if args.refresh_schemas:
         from archolith_mcp_audit.schema_estimator import refresh_schema_catalog
-        catalog = refresh_schema_catalog()
-        servers = list(catalog.keys())
+        result = refresh_schema_catalog()
 
-        if servers:
-            print(f"Schema catalog refreshed. {len(servers)} servers: {', '.join(sorted(servers))}")
+        if result.failed_servers and result.succeeded_servers:
+            print(f"Schema catalog refreshed: "
+                  f"{result.succeeded_count} OK, {result.failed_count} failed")
+            for s, err in result.failed_servers.items():
+                print(f"  FAIL  {s} — {err}", file=sys.stderr)
+            for s in result.succeeded_servers:
+                tools = result.catalog[s]
+                total_tokens = sum(t.get("schema_tokens", 0) for t in tools)
+                print(f"  OK    {s}: {len(tools)} tools, {total_tokens} total schema tokens")
+            return 0
+        elif result.succeeded_servers:
+            print(f"Schema catalog refreshed: {result.succeeded_count} servers OK")
+            for s in result.succeeded_servers:
+                tools = result.catalog[s]
+                total_tokens = sum(t.get("schema_tokens", 0) for t in tools)
+                print(f"  OK    {s}: {len(tools)} tools, {total_tokens} total schema tokens")
             return 0
         else:
-            print("Error: schema refresh failed for all servers. Check .mcp.json and server availability.",
-                  file=sys.stderr)
+            print("Error: schema refresh failed for all servers.", file=sys.stderr)
+            for s, err in result.failed_servers.items():
+                err_msg = err.replace("\n", "; ") if err else "unknown error"
+                print(f"  FAIL  {s} — {err_msg}", file=sys.stderr)
+            print("Check .mcp.json and server availability.", file=sys.stderr)
             return 1
 
     # Comparison mode

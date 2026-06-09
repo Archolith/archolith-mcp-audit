@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "command": "python ${CODEX_PLUGIN_DIR}/hook_observer_codex.py"
+      }
+    ]
+  }
+}

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 from archolith_mcp_audit.cli import main
+from archolith_mcp_audit.schema_estimator import SchemaRefreshResult
 
 
 class TestCliComparison:
@@ -92,7 +92,10 @@ class TestCliSchemaRefresh:
         """Schema refresh with servers succeeds exits 0."""
         with patch(
             "archolith_mcp_audit.schema_estimator.refresh_schema_catalog",
-            return_value={"gradle": [{"name": "gradle_compile", "schema_tokens": 250}]},
+            return_value=SchemaRefreshResult(
+                catalog={"gradle": [{"name": "gradle_compile", "schema_tokens": 250}]},
+                total_servers=1,
+            ),
         ):
             exit_code = main(["--refresh-schemas"])
             assert exit_code == 0
@@ -101,7 +104,7 @@ class TestCliSchemaRefresh:
         """Schema refresh with all servers failing exits 1."""
         with patch(
             "archolith_mcp_audit.schema_estimator.refresh_schema_catalog",
-            return_value={},
+            return_value=SchemaRefreshResult(catalog={}),
         ):
             exit_code = main(["--refresh-schemas"])
             assert exit_code == 1
@@ -110,22 +113,25 @@ class TestCliSchemaRefresh:
         """Refresh with results prints server summary."""
         with patch(
             "archolith_mcp_audit.schema_estimator.refresh_schema_catalog",
-            return_value={
-                "gradle": [{"name": "gradle_compile", "schema_tokens": 250}],
-                "vps": [{"name": "vps_status", "schema_tokens": 180}],
-                "memory": [{"name": "query_structure", "schema_tokens": 300}],
-            },
+            return_value=SchemaRefreshResult(
+                catalog={
+                    "gradle": [{"name": "gradle_compile", "schema_tokens": 250}],
+                    "vps": [{"name": "vps_status", "schema_tokens": 180}],
+                    "memory": [{"name": "query_structure", "schema_tokens": 300}],
+                },
+                total_servers=3,
+            ),
         ):
             exit_code = main(["--refresh-schemas"])
             captured = capsys.readouterr()
             assert exit_code == 0
-            assert "3 servers: gradle, memory, vps" in captured.out
+            assert "3 servers OK" in captured.out
 
     def test_refresh_all_fail_shows_error(self, capsys) -> None:
         """Refresh with all failures prints error to stderr."""
         with patch(
             "archolith_mcp_audit.schema_estimator.refresh_schema_catalog",
-            return_value={},
+            return_value=SchemaRefreshResult(catalog={}),
         ):
             exit_code = main(["--refresh-schemas"])
             captured = capsys.readouterr()

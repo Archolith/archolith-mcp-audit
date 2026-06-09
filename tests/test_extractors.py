@@ -7,7 +7,7 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-from archolith_mcp_audit.extractors.base import SessionData, ToolCall, ToolResult
+from archolith_mcp_audit.extractors.base import SessionData
 from archolith_mcp_audit.extractors.claude import extract_session as extract_claude
 from archolith_mcp_audit.extractors.codex import extract_session as extract_codex
 from archolith_mcp_audit.extractors.opencode import extract_session as extract_opencode

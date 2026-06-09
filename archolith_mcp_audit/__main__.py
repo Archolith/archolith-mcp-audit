@@ -1,4 +1,4 @@
-"""Enable running with python -m archolith_mcp_audit."""
+"""CLI entry point — delegates to archolith_mcp_audit.cli.main()."""
 
 import sys
 

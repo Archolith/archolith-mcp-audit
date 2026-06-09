@@ -1,13 +1,14 @@
 """In-session MCP audit server.
 
-Exposes three tools:
+Exposes four tools:
   mcp_audit_summary — lightweight per-server token share table
   mcp_audit_detail  — deep dive on one server
   mcp_audit_check   — threshold pass/fail check
+  mcp_audit_bridge_status — telemetry bridge status
 
 The server maintains a LiveAccumulator that observes tool results
 as the session progresses. Observations are fed via a TelemetryBridge
-that connects to RTK telemetry, file-based telemetry, or direct push
+that connects to archolith-filter telemetry, file-based telemetry, or direct push
 from hook observers.
 
 Disabled by default to avoid adding ~200-300 tokens of schema overhead
@@ -32,12 +33,33 @@ from archolith_mcp_audit.accumulator import LiveAccumulator
 from archolith_mcp_audit.attributor import _load_mapping
 from archolith_mcp_audit.telemetry_bridge import TelemetryBridge
 
+# Module-level MCP server reference, set when FastMCP is available and enabled
+_mcp_server: FastMCP | None = None
+
 SESSIONS_DIR = Path.home() / ".archolith" / "sessions"
 MAX_SESSION_AGE_HOURS = 24
 
 # Per-session caches (keyed by session_id)
 _accumulators: dict[str, LiveAccumulator] = {}
 _bridges: dict[str, TelemetryBridge] = {}
+
+__all__ = [
+    "mcp_audit_summary",
+    "mcp_audit_detail",
+    "mcp_audit_check",
+    "mcp_audit_bridge_status",
+    "_reset_caches",
+    "get_accumulator",
+    "get_bridge",
+    "list_active_sessions",
+]
+
+
+def _reset_caches() -> None:
+    """Clear all per-session caches. Used in testing."""
+    global _accumulators, _bridges
+    _accumulators.clear()
+    _bridges.clear()
 
 
 def list_active_sessions() -> list[str]:
@@ -78,13 +100,17 @@ def get_bridge(session_id: str) -> TelemetryBridge:
     Connects to ~/.archolith/sessions/<session_id>.jsonl written by the
     hook_observer_standalone PostToolUse hook.
     Also honours:
-      - MCP_AUDIT_RTK=1          — connect to RTK FilterTelemetryStore
+      - MCP_AUDIT_FILTER=1       — connect to archolith-filter telemetry (preferred)
+      - MCP_AUDIT_RTK=1          — connect to archolith-filter telemetry (legacy alias)
       - MCP_AUDIT_TELEMETRY_FILE — override file path (single-session compat)
     """
     if session_id not in _bridges:
         bridge = TelemetryBridge(accumulator=get_accumulator(session_id))
 
-        if os.environ.get("MCP_AUDIT_RTK", "").lower() in ("1", "true", "yes"):
+        # MCP_AUDIT_FILTER is preferred, MCP_AUDIT_RTK is legacy alias
+        filter_enabled = os.environ.get("MCP_AUDIT_FILTER", "").lower() in ("1", "true", "yes")
+        rtk_enabled = os.environ.get("MCP_AUDIT_RTK", "").lower() in ("1", "true", "yes")
+        if filter_enabled or rtk_enabled:
             bridge.connect_rtk()
 
         # Explicit override takes precedence (backward compat)
@@ -129,13 +155,8 @@ if _HAS_FASTMCP:
             """
             return ("MCP audit is disabled. Set MCP_AUDIT_ENABLED=1 to enable.")
 
-        def run_server() -> None:
-            """Start the MCP server (disabled)."""
-            print("MCP audit server is disabled. Set MCP_AUDIT_ENABLED=1 to enable.", flush=True)
-            raise SystemExit(0)
-
     else:
-        mcp = FastMCP(
+        _mcp_server = FastMCP(
             "archolith-audit",
             instructions="MCP token usage audit. Use mcp_audit_summary for a quick "
                          "overview, mcp_audit_detail for deep-dive on a server, "
@@ -143,7 +164,7 @@ if _HAS_FASTMCP:
                          "mcp_audit_bridge_status for telemetry source status.",
         )
 
-        @mcp.tool()
+        @_mcp_server.tool()
         def mcp_audit_summary() -> str:
             """Show per-server token usage summary for all active sessions.
 
@@ -188,7 +209,7 @@ if _HAS_FASTMCP:
 
             return "\n".join(lines)
 
-        @mcp.tool()
+        @_mcp_server.tool()
         def mcp_audit_detail(server: str) -> str:
             """Show detailed token usage for a specific MCP server across all sessions.
 
@@ -246,7 +267,7 @@ if _HAS_FASTMCP:
 
             return "\n".join(lines)
 
-        @mcp.tool()
+        @_mcp_server.tool()
         def mcp_audit_check(
             max_server_share: float = 20.0,
             max_total_mcp_share: float = 40.0,
@@ -293,7 +314,7 @@ if _HAS_FASTMCP:
             lines.append(f"Result: {overall}")
             return "\n".join(lines)
 
-        @mcp.tool()
+        @_mcp_server.tool()
         def mcp_audit_bridge_status() -> str:
             """Show telemetry bridge status for all active sessions. ~50 tokens."""
             sessions = list_active_sessions()
@@ -311,15 +332,18 @@ if _HAS_FASTMCP:
                 )
             return "\n".join(lines)
 
-        def run_server() -> None:
-            """Start the MCP server."""
-            mcp.run()
 
-else:
-    def run_server() -> None:
-        """Stub when FastMCP is not installed."""
+def run_server() -> None:
+    """Start the MCP server. Handles disabled mode and missing FastMCP."""
+    if not _HAS_FASTMCP:
         print("Error: FastMCP is not installed. Install with: pip install fastmcp", flush=True)
         raise SystemExit(1)
+    if not _audit_enabled:
+        print("MCP audit server is disabled. Set MCP_AUDIT_ENABLED=1 to enable.", flush=True)
+        raise SystemExit(0)
+    if _mcp_server is None:
+        raise RuntimeError("MCP server not initialized")
+    _mcp_server.run()
 
 
 if __name__ == "__main__":

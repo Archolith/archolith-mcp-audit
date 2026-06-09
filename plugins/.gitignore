@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+
+# Bundled core copies — build artifacts, not source.
+# Created by: python scripts/release.py sync
+# These are full copies of archolith_mcp_audit/ from the monorepo root.
+*/archolith_mcp_audit/

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from archolith_mcp_audit.comparator import ServerDelta, compare_reports, format_delta_report
 
 

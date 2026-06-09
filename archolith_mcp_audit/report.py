@@ -4,11 +4,41 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import TypedDict
 
 from archolith_mcp_audit.attributor import attribute_tool
-from archolith_mcp_audit.extractors.base import SessionData, ToolResult
+from archolith_mcp_audit.extractors.base import SessionData
 from archolith_mcp_audit.tokenizer import count_tokens
 from archolith_mcp_audit.waste_detector import WasteFinding
+
+
+class _ServerSummary(TypedDict):
+    """Intermediate representation for server report cards."""
+
+    name: str
+    token_share: int
+    token_share_pct: float
+    call_count: int
+    tools: list[str]
+    findings: list[WasteFinding]
+    estimated_recoverable_tokens: int
+
+
+def _build_server_summaries(report: AuditReport) -> list[_ServerSummary]:
+    """Build a list of server summaries sorted by token share descending."""
+    summaries: list[_ServerSummary] = []
+    for server_name in sorted(report.servers, key=lambda s: -report.servers[s].token_share):
+        sr = report.servers[server_name]
+        summaries.append(_ServerSummary(
+            name=server_name,
+            token_share=sr.token_share,
+            token_share_pct=sr.token_share_pct,
+            call_count=sr.call_count,
+            tools=sr.tools,
+            findings=sr.findings,
+            estimated_recoverable_tokens=sr.estimated_recoverable_tokens,
+        ))
+    return summaries
 
 
 @dataclass
@@ -148,18 +178,17 @@ def format_report_text(report: AuditReport) -> str:
     lines.append("-" * 60)
     lines.append("")
 
-    for server_name in sorted(report.servers, key=lambda s: -report.servers[s].token_share):
-        sr = report.servers[server_name]
-        lines.append(f"--- {server_name} " + "-" * (50 - len(server_name)))
-        lines.append(f"  Token share:   {sr.token_share:>10,} ({sr.token_share_pct:.1f}%)")
-        lines.append(f"  Calls:        {sr.call_count:>10,}")
-        lines.append(f"  Tools:        {', '.join(sr.tools[:5])}"
-                     + (" ..." if len(sr.tools) > 5 else ""))
+    for summary in _build_server_summaries(report):
+        lines.append(f"--- {summary['name']} " + "-" * (50 - len(summary['name'])))
+        lines.append(f"  Token share:   {summary['token_share']:>10,} ({summary['token_share_pct']:.1f}%)")
+        lines.append(f"  Calls:        {summary['call_count']:>10,}")
+        lines.append(f"  Tools:        {', '.join(summary['tools'][:5])}"
+                     + (" ..." if len(summary['tools']) > 5 else ""))
         lines.append("")
 
-        if sr.findings:
+        if summary['findings']:
             lines.append("  Waste findings:")
-            for f in sr.findings:
+            for f in summary['findings']:
                 sev = f.severity.upper()
                 lines.append(f"    [{sev:>8}]  {f.waste_type}")
                 lines.append(f"      {f.description}")
@@ -171,9 +200,9 @@ def format_report_text(report: AuditReport) -> str:
             lines.append("  No waste detected.")
             lines.append("")
 
-        if sr.estimated_recoverable_tokens > 0:
-            lines.append(f"  Estimated recoverable: {sr.estimated_recoverable_tokens:,} tokens "
-                         f"({sr.estimated_recoverable_tokens / max(1, sr.token_share) * 100:.0f}% "
+        if summary['estimated_recoverable_tokens'] > 0:
+            lines.append(f"  Estimated recoverable: {summary['estimated_recoverable_tokens']:,} tokens "
+                         f"({summary['estimated_recoverable_tokens'] / max(1, summary['token_share']) * 100:.0f}% "
                          f"of server share)")
             lines.append("")
 
@@ -259,12 +288,15 @@ def format_report_markdown(report: AuditReport) -> str:
     # Overview table
     lines.append("## Overview")
     lines.append("")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"|--------|-------|")
+    lines.append("| Metric | Value |")
+    lines.append("|--------|-------|")
     lines.append(f"| Total tool result tokens | {report.total_tokens:,} |")
     lines.append(f"| MCP server share | {report.mcp_tokens:,} ({report.mcp_share_pct:.1f}%) |")
     lines.append(f"| Non-MCP share | {report.non_mcp_tokens:,} ({report.non_mcp_share_pct:.1f}%) |")
-    lines.append(f"| Result waste detected | {report.total_recoverable_tokens:,} ({report.total_recoverable_pct:.1f}%) |")
+    lines.append(
+        f"| Result waste detected | {report.total_recoverable_tokens:,}"
+        f" ({report.total_recoverable_pct:.1f}%) |"
+    )
     if report.schema_tokens_wasted > 0:
         lines.append(f"| Schema overhead (est.) | {report.schema_tokens_wasted:,} (per-turn x turns) |")
     lines.append("")
@@ -273,20 +305,19 @@ def format_report_markdown(report: AuditReport) -> str:
     lines.append("## Per-Server Report Cards")
     lines.append("")
 
-    for server_name in sorted(report.servers, key=lambda s: -report.servers[s].token_share):
-        sr = report.servers[server_name]
-        lines.append(f"### {server_name}")
+    for summary in _build_server_summaries(report):
+        lines.append(f"### {summary['name']}")
         lines.append("")
-        lines.append(f"- **Token share**: {sr.token_share:,} ({sr.token_share_pct:.1f}%)")
-        lines.append(f"- **Calls**: {sr.call_count:,}")
-        lines.append(f"- **Tools**: {', '.join(sr.tools[:8])}")
-        lines.append(f"- **Estimated recoverable**: {sr.estimated_recoverable_tokens:,} tokens")
+        lines.append(f"- **Token share**: {summary['token_share']:,} ({summary['token_share_pct']:.1f}%)")
+        lines.append(f"- **Calls**: {summary['call_count']:,}")
+        lines.append(f"- **Tools**: {', '.join(summary['tools'][:8])}")
+        lines.append(f"- **Estimated recoverable**: {summary['estimated_recoverable_tokens']:,} tokens")
         lines.append("")
 
-        if sr.findings:
+        if summary['findings']:
             lines.append("| Severity | Type | Description | Tokens wasted | Savings % |")
             lines.append("|----------|------|-------------|--------------|-----------|")
-            for f in sr.findings:
+            for f in summary['findings']:
                 lines.append(f"| {f.severity} | {f.waste_type} | {f.description} | "
                              f"{f.tokens_wasted:,} | {f.estimated_savings_pct:.0f}% |")
             lines.append("")

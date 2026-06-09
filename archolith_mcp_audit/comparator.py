@@ -6,7 +6,6 @@ metrics, and produces a delta report showing what changed.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 
@@ -25,16 +24,24 @@ class ServerDelta:
     waste_change_pct: float = 0.0
     before_calls: int = 0
     after_calls: int = 0
-    new_waste_types: list[str] = None  # type: ignore[assignment]
-    resolved_waste_types: list[str] = None  # type: ignore[assignment]
+    new_waste_types: list[str] | None = None
+    resolved_waste_types: list[str] | None = None
     status: str = ""  # "improved", "regressed", "no_change", "new", "removed"
 
 
 def compare_reports(
     before: dict,
     after: dict,
+    regression_threshold_pct: float = 20.0,
 ) -> list[ServerDelta]:
-    """Compare two JSON audit reports and return per-server deltas."""
+    """Compare two JSON audit reports and return per-server deltas.
+
+    Args:
+        before: The baseline JSON audit report.
+        after: The follow-up JSON audit report.
+        regression_threshold_pct: Percentage change in waste at which a
+            server is considered "regressed" or "improved". Default 20%.
+    """
     all_servers = set(list(before.get("servers", {}).keys()) + list(after.get("servers", {}).keys()))
     all_servers.discard("non-mcp")
 
@@ -66,9 +73,9 @@ def compare_reports(
             status = "new"
         elif a_tokens == 0 and b_tokens > 0:
             status = "removed"
-        elif waste_change < -100:
+        elif b_waste > 0 and waste_pct < -regression_threshold_pct:
             status = "improved"
-        elif waste_change > 100:
+        elif b_waste > 0 and waste_pct > regression_threshold_pct:
             status = "regressed"
         else:
             status = "no_change"
@@ -144,7 +151,7 @@ def format_delta_report(deltas: list[ServerDelta], after: dict | None = None) ->
             after_server = after.get("servers", {}).get(d.server, {})
             after_findings = after_server.get("findings", [])
             if after_findings:
-                lines.append(f"  Remaining waste:")
+                lines.append("  Remaining waste:")
                 for f in after_findings[:3]:
                     sev = f.get("severity", "unknown").upper()
                     wtype = f.get("waste_type", "unknown")

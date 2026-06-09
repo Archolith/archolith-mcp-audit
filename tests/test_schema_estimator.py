@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -236,97 +238,169 @@ class TestRefreshSchemaCatalog:
             json.dump(data, f)
         return config_path
 
+    @staticmethod
+    def _make_fake_fastmcp(client_cls: type) -> types.ModuleType:
+        fake_module = types.ModuleType("fastmcp")
+        fake_module.Client = client_cls
+        return fake_module
+
     @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
-    @patch("archolith_mcp_audit.schema_estimator._refresh_all_servers")
     @patch("archolith_mcp_audit.schema_estimator._write_catalog")
-    def test_all_servers_succeed(
+    def test_refresh_with_mock_client(
         self,
         mock_write: AsyncMock,
-        mock_refresh: AsyncMock,
         mock_find: AsyncMock,
     ) -> None:
-        """All servers succeed → catalog written with all tools."""
+        """Refresh uses the FastMCP client path and writes real catalog entries."""
         import asyncio
+        import shutil
+
+        class FakeTool:
+            def __init__(self, name: str, description: str = "", input_schema: dict | None = None) -> None:
+                self.name = name
+                self.description = description
+                self.inputSchema = input_schema or {}
+
+        class FakeClient:
+            def __init__(self, command: str, args: list[str], cwd: str | None = None, env: dict | None = None) -> None:
+                self.command = command
+                self.args = args
+                self.cwd = cwd
+                self.env = env
+
+            async def __aenter__(self) -> FakeClient:
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            async def list_tools(self) -> list[FakeTool]:
+                if self.command == "python":
+                    return [FakeTool("gradle_compile", "Compile Java", {"type": "object"})]
+                return [FakeTool("vps_status", "Check VPS", {"type": "object"})]
 
         with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
             config_path = self._make_mcp_config()
             mock_find.return_value = config_path
-            mock_refresh.return_value = {
-                "gradle": [{"name": "gradle_compile", "schema_tokens": 250}],
-                "vps": [{"name": "vps_status", "schema_tokens": 180}],
-            }
 
             with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
                 output_path = Path(f.name)
 
             try:
-                result = refresh_schema_catalog(output_path)
-                assert "gradle" in result.catalog
-                assert "vps" in result.catalog
-                assert "archolith-audit" not in result.catalog  # self-excluded
-                assert result.catalog["gradle"][0]["schema_tokens"] == 250
+                with patch.dict(sys.modules, {"fastmcp": self._make_fake_fastmcp(FakeClient)}):
+                    result = refresh_schema_catalog(output_path)
+
+                assert sorted(result.catalog) == ["gradle", "vps"]
+                assert result.failed_servers == {}
+                assert result.total_servers == 2
+                assert result.catalog["gradle"][0]["name"] == "gradle_compile"
+                assert result.catalog["vps"][0]["name"] == "vps_status"
+                mock_write.assert_called_once_with(output_path, result.catalog)
             finally:
                 output_path.unlink(missing_ok=True)
-                import shutil
                 shutil.rmtree(config_path.parent, ignore_errors=True)
 
     @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
-    @patch("archolith_mcp_audit.schema_estimator._refresh_all_servers")
     @patch("archolith_mcp_audit.schema_estimator._write_catalog")
-    def test_partial_failure(
+    def test_refresh_partial_failure(
         self,
         mock_write: AsyncMock,
-        mock_refresh: AsyncMock,
         mock_find: AsyncMock,
     ) -> None:
-        """Some servers fail → partial catalog, no exception."""
+        """One FastMCP client call can fail without blocking other servers."""
         import asyncio
+        import shutil
+
+        class FakeTool:
+            def __init__(self, name: str, description: str = "", input_schema: dict | None = None) -> None:
+                self.name = name
+                self.description = description
+                self.inputSchema = input_schema or {}
+
+        class FakeClient:
+            def __init__(self, command: str, args: list[str], cwd: str | None = None, env: dict | None = None) -> None:
+                self.command = command
+                self.args = args
+                self.cwd = cwd
+                self.env = env
+
+            async def __aenter__(self) -> FakeClient:
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            async def list_tools(self) -> list[FakeTool]:
+                if self.command == "node":
+                    raise RuntimeError("vps unavailable")
+                return [FakeTool("gradle_compile", "Compile Java", {"type": "object"})]
 
         with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
             config_path = self._make_mcp_config()
             mock_find.return_value = config_path
-            mock_refresh.return_value = {
-                "gradle": [{"name": "gradle_compile", "schema_tokens": 250}],
-            }
 
             with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
                 output_path = Path(f.name)
 
             try:
-                result = refresh_schema_catalog(output_path)
-                assert "gradle" in result.catalog
-                assert "vps" not in result.catalog
+                with patch.dict(sys.modules, {"fastmcp": self._make_fake_fastmcp(FakeClient)}):
+                    result = refresh_schema_catalog(output_path)
+
+                assert sorted(result.catalog) == ["gradle"]
+                assert result.total_servers == 2
+                assert result.failed_servers == {"vps": "vps unavailable"}
+                mock_write.assert_called_once_with(output_path, result.catalog)
             finally:
                 output_path.unlink(missing_ok=True)
-                import shutil
                 shutil.rmtree(config_path.parent, ignore_errors=True)
 
     @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")
-    @patch("archolith_mcp_audit.schema_estimator._refresh_all_servers")
     @patch("archolith_mcp_audit.schema_estimator._write_catalog")
-    def test_all_fail(
+    def test_refresh_all_fail_nonzero(
         self,
         mock_write: AsyncMock,
-        mock_refresh: AsyncMock,
         mock_find: AsyncMock,
     ) -> None:
-        """All servers fail → empty catalog."""
+        """When all FastMCP queries fail, the refresh result reports zero successes."""
         import asyncio
+        import shutil
+
+        class FakeClient:
+            def __init__(self, command: str, args: list[str], cwd: str | None = None, env: dict | None = None) -> None:
+                self.command = command
+                self.args = args
+                self.cwd = cwd
+                self.env = env
+
+            async def __aenter__(self) -> FakeClient:
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            async def list_tools(self) -> list[object]:
+                raise RuntimeError(f"{self.command} unavailable")
 
         with patch.object(asyncio, "get_running_loop", side_effect=RuntimeError):
             config_path = self._make_mcp_config()
             mock_find.return_value = config_path
-            mock_refresh.return_value = {}
 
             with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
                 output_path = Path(f.name)
 
             try:
-                result = refresh_schema_catalog(output_path)
+                with patch.dict(sys.modules, {"fastmcp": self._make_fake_fastmcp(FakeClient)}):
+                    result = refresh_schema_catalog(output_path)
+
                 assert result.catalog == {}
+                assert result.total_servers == 2
+                assert result.failed_servers == {
+                    "gradle": "python unavailable",
+                    "vps": "node unavailable",
+                }
+                mock_write.assert_called_once_with(output_path, {})
             finally:
                 output_path.unlink(missing_ok=True)
-                import shutil
                 shutil.rmtree(config_path.parent, ignore_errors=True)
 
     @patch("archolith_mcp_audit.schema_estimator._find_mcp_config")

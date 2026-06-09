@@ -1,5 +1,24 @@
 # Changelog — archolith-audit
 
+## 2026-06-02 — remediation follow-up: refresh contract and verification closeout
+
+- Added real FastMCP-path refresh tests in `tests/test_schema_estimator.py` for success, partial failure, and all-fail scenarios, replacing the prior `_refresh_all_servers`-only coverage gap.
+- Updated `SchemaRefreshResult.total_servers` semantics in `schema_estimator.py` and `.agent/data_models.md` to count only refresh-eligible servers (self and non-stdio entries excluded).
+- Fixed `telemetry_bridge.py` warning text so fallback diagnostics report `raw_tokens` / `filtered_tokens` instead of incorrectly saying `using 0`; added regression coverage in `tests/test_telemetry_bridge.py`.
+- Fixed lingering Ruff drift in `hook_observer_codex.py`.
+- Verification: `python -m ruff check archolith_mcp_audit tests` PASS; `TMP/TEMP=C:\tmp python -m pytest tests/ -q` PASS (`175/175`).
+
+## 2026-06-02 — Quality remediation: god-file split, shared rendering, config cleanup
+
+- **Phase 1**: Split `waste_detector.py` (736 LOC god file) into `detectors/` package with one file per detector plus `_helpers.py`. Original file remains as backward-compatible re-export shim. All 22 waste detector tests pass.
+- **Phase 2**: Extracted `_build_server_summaries()` shared rendering in `report.py`. `format_report_text` and `format_report_markdown` now use a common intermediate representation. All 6 report tests pass with identical output.
+- **Phase 3**: Enhanced `refresh_schema_catalog()` to return `SchemaRefreshResult` with per-server success/failure info. CLI now prints per-server status when refreshing schemas.
+- **Phase 4**: Replaced hardcoded Windows user paths in `cli.py --all` with `CLAUDE_PROJECTS_DIR`, `CODEX_SESSIONS_DIR`, and `OPENCODE_DB` env vars (with `Path.home()` fallbacks). Also fixed `claude_dir` to scan all project subdirectories.
+- **Phase 5**: Added diagnostic logging when RTK telemetry entries are missing required fields (`tool_name`, `raw_chars`, `filtered_chars`). Warns once per field per batch.
+- **Phase 6**: Normalized comparator thresholds from raw `±100` token magic numbers to configurable percentage-based (`regression_threshold_pct`, default 20%).
+- **Phase 0**: Consolidated 3 `run_server()` definitions into one, fixed tautological `__main__.py` docstring, added NOTE about tiktoken duplication in `hook_observer_standalone.py`.
+- **Lint**: Ruff check passes cleanly. 172/172 tests pass at the time of this phase wrapup.
+
 ## 2026-05-29 — redundant_fields detector accuracy fix
 
 - `waste_detector._detect_redundant_fields` no longer flags text-returning tools. It now

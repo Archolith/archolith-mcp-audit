@@ -147,25 +147,35 @@ Full session audit report.
 | `total_tokens` | `int` | Total tokens in session |
 | `mcp_tokens` | `int` | Tokens attributed to MCP servers |
 | `mcp_share_pct` | `float` | MCP share of total |
+| `non_mcp_tokens` | `int` | Tokens not attributed to MCP servers |
+| `non_mcp_share_pct` | `float` | Non-MCP share of total |
 | `servers` | `dict[str, ServerReport]` | Per-server report cards |
 | `top_optimizations` | `list[WasteFinding]` | Top 5 findings by impact |
 | `total_recoverable_tokens` | `int` | Total estimated recoverable |
 | `total_recoverable_pct` | `float` | Recoverable share of total |
+| `schema_tokens_wasted` | `int` | Tool schema overhead in system prompt (per-turn cost) |
+| `total_results` | `int` | Total tool results in session |
 
-### DeltaReport
+### ServerDelta
 
-Before/after comparison.
+Before/after comparison for a single server.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `server` | `str` | Server being compared |
-| `before` | `ServerReport` | Pre-optimization state |
-| `after` | `ServerReport` | Post-optimization state |
+| `server` | `str` | Canonical MCP server name |
+| `before_tokens` | `int` | Token share before optimization |
+| `after_tokens` | `int` | Token share after optimization |
 | `token_change` | `int` | Absolute token change |
 | `token_change_pct` | `float` | Percentage token change |
+| `before_waste` | `int` | Total waste detected before |
+| `after_waste` | `int` | Total waste detected after |
 | `waste_change` | `int` | Absolute waste change |
 | `waste_change_pct` | `float` | Percentage waste change |
-| `regressions` | `list[WasteFinding]` | New waste introduced |
+| `before_calls` | `int` | Tool call count before |
+| `after_calls` | `int` | Tool call count after |
+| `new_waste_types` | `list[str]` | Waste patterns introduced in after |
+| `resolved_waste_types` | `list[str]` | Waste patterns eliminated in after |
+| `status` | `str` | One of: `improved`, `regressed`, `no_change`, `new`, `removed` |
 
 ## Enums
 

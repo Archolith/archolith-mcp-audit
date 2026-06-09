@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from archolith_mcp_audit.accumulator import LiveAccumulator
 from archolith_mcp_audit.telemetry_bridge import (
     FileTelemetrySource,
     InMemoryTelemetrySource,
+    RtkTelemetrySource,
     TelemetryBridge,
     TelemetryEntry,
     write_telemetry_entry,
@@ -111,6 +113,30 @@ class TestFileTelemetrySource:
         source = FileTelemetrySource(path)
         entries = source.pull()
         assert len(entries) == 2
+
+
+class TestRtkTelemetrySource:
+    def test_token_fallback_warning_reports_token_fields(self, caplog) -> None:
+        source = RtkTelemetrySource()
+        source._available = True
+        source._store = SimpleNamespace(records=[
+            SimpleNamespace(
+                tool="mcp__vps__vps_status",
+                raw_tokens=42,
+                filtered_tokens=11,
+                timestamp=1.5,
+            )
+        ])
+
+        with caplog.at_level("WARNING"):
+            entries = source.pull()
+
+        assert len(entries) == 1
+        assert entries[0].tool_name == "mcp__vps__vps_status"
+        assert entries[0].raw_chars == 42
+        assert entries[0].filtered_chars == 11
+        assert "falling back to 'raw_tokens': 42" in caplog.text
+        assert "falling back to 'filtered_tokens': 11" in caplog.text
 
 
 class TestTelemetryBridge:

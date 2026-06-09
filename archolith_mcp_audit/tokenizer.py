@@ -23,6 +23,12 @@ class TokenCount:
 _encodings: dict[str, tiktoken.Encoding] | None = None
 
 
+def _reset_encodings() -> None:
+    """Clear the cached tiktoken encodings. Used in testing."""
+    global _encodings
+    _encodings = None
+
+
 def get_encodings() -> dict[str, tiktoken.Encoding]:
     """Return cached tiktoken encodings (cl100k + o200k)."""
     global _encodings
@@ -64,8 +70,7 @@ def count_tokens_batch(
 ) -> list[TokenCount]:
     """Count tokens for multiple texts.
 
-    Uses sentinel-joined batch encoding for performance on large corpora.
-    Falls back to per-text encoding if the batch approach fails.
+    Uses per-text encoding for reliability across all input sizes.
     """
     if not texts:
         return []

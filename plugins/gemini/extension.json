@@ -1,0 +1,18 @@
+{
+  "name": "archolith-audit",
+  "version": "0.1.0",
+  "description": "Live MCP token usage audit",
+  "hooks": {
+    "AfterTool": "hooks/after-tool.js"
+  },
+  "mcpServers": {
+    "archolith-audit": {
+      "command": "python",
+      "args": ["-m", "archolith_mcp_audit.mcp_server"],
+      "env": {
+        "MCP_AUDIT_ENABLED": "1",
+        "PYTHONPATH": "${GEMINI_PLUGIN_DIR}"
+      }
+    }
+  }
+}

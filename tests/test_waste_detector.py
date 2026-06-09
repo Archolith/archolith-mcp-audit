@@ -3,7 +3,7 @@
 import json
 
 from archolith_mcp_audit.extractors.base import SessionData, ToolResult
-from archolith_mcp_audit.waste_detector import detect_waste, _similarity, _is_help_text
+from archolith_mcp_audit.waste_detector import _is_help_text, _similarity, detect_waste
 
 
 class TestPollingDetection:

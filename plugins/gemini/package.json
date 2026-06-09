@@ -1,0 +1,16 @@
+{
+  "name": "@archolith/gemini-extension",
+  "version": "0.1.0",
+  "description": "Live MCP token usage audit for Gemini CLI sessions",
+  "keywords": ["geminicli-plugin", "archolith", "mcp", "token-audit"],
+  "main": "hooks/after-tool.js",
+  "files": [
+    "extension.json",
+    "hooks/",
+    "archolith_mcp_audit/",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

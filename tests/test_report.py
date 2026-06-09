@@ -1,7 +1,7 @@
 """Tests for report generator."""
 
 from archolith_mcp_audit.extractors.base import SessionData, ToolResult
-from archolith_mcp_audit.report import build_report, format_report_text, format_report_json, format_report_markdown
+from archolith_mcp_audit.report import build_report, format_report_json, format_report_markdown, format_report_text
 from archolith_mcp_audit.waste_detector import WasteFinding
 
 

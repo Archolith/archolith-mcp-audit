@@ -68,7 +68,7 @@ def _is_self_server(name: str, command: str, args: list[str]) -> bool:
         return True
 
     cmd_lower = command.strip().lower()
-    if cmd_lower in _PYTHON_COMMANDS or cmd_lower.endswith(".exe") and "python" in cmd_lower:
+    if cmd_lower in _PYTHON_COMMANDS or (cmd_lower.endswith(".exe") and "python" in cmd_lower):
         for arg in args:
             if "archolith_mcp_audit" in arg:
                 log.debug("Skipping self by command pattern: %s %s", command, args)
@@ -100,6 +100,15 @@ def _find_mcp_config() -> Path | None:
         return fallback
 
     return None
+
+
+def _is_queryable_server(name: str, server_conf: dict) -> bool:
+    """Return True when a config entry is eligible for schema refresh."""
+    command = server_conf.get("command", "")
+    args = server_conf.get("args", [])
+    if _is_self_server(name, command, args):
+        return False
+    return bool(command)
 
 
 async def _query_server_via_fastmcp(
@@ -183,7 +192,7 @@ async def _refresh_all_servers(
                 cwd=cwd,
                 env=env,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             failed_servers[server_name] = f"timed out after {_PER_SERVER_TIMEOUT}s"
             log.warning("Timed out querying %s", server_name)
             continue
@@ -216,15 +225,45 @@ async def _refresh_all_servers(
     return catalog
 
 
-def refresh_schema_catalog(output_path: Path | None = None) -> dict[str, list[dict]]:
+@dataclass
+class SchemaRefreshResult:
+    """Result of a schema catalog refresh operation.
+
+    Attributes:
+        catalog: Mapping of server_name -> list of tool schema entries.
+            An empty dict means no servers were successfully queried.
+        failed_servers: Mapping of server_name -> error message for
+            servers that failed to respond or were unreachable.
+        total_servers: Total number of MCP servers eligible for schema
+            refresh (excluding self and non-stdio entries).
+    """
+
+    catalog: dict[str, list[dict]] = field(default_factory=dict)
+    failed_servers: dict[str, str] = field(default_factory=dict)
+    total_servers: int = 0
+
+    @property
+    def succeeded_servers(self) -> list[str]:
+        return sorted(self.catalog.keys())
+
+    @property
+    def succeeded_count(self) -> int:
+        return len(self.catalog)
+
+    @property
+    def failed_count(self) -> int:
+        return len(self.failed_servers)
+
+
+def refresh_schema_catalog(
+    output_path: Path | None = None,
+) -> SchemaRefreshResult:
     """Refresh schema catalog by querying MCP servers.
 
     Attempts to call list_tools on each configured MCP server.
-    Returns the catalog dict that was written.
-
-    The caller can inspect the return value to determine success:
-    an empty dict means all servers failed, no servers configured,
-    or no .mcp.json was found.
+    Returns a SchemaRefreshResult with the catalog, per-server failure
+    info, and total server count. The caller can inspect the result to
+    determine which servers succeeded and which failed.
     """
     target = output_path or _DEFAULT_CATALOG_PATH
 
@@ -234,14 +273,14 @@ def refresh_schema_catalog(output_path: Path | None = None) -> dict[str, list[di
     except ImportError:
         log.warning("FastMCP not available for schema refresh. Using empty catalog.")
         _write_catalog(target, {})
-        return {}
+        return SchemaRefreshResult(catalog={}, failed_servers={"FastMCP": "not installed"}, total_servers=0)
 
     # Locate .mcp.json (workspace-first, then user home fallback)
     mcp_config_path = _find_mcp_config()
     if mcp_config_path is None:
         log.warning("No .mcp.json found (searched cwd, parents, and ~/.claude/)")
         _write_catalog(target, {})
-        return {}
+        return SchemaRefreshResult(catalog={}, failed_servers={"config": ".mcp.json not found"}, total_servers=0)
 
     try:
         with open(mcp_config_path, encoding="utf-8") as f:
@@ -249,24 +288,28 @@ def refresh_schema_catalog(output_path: Path | None = None) -> dict[str, list[di
     except (json.JSONDecodeError, OSError) as e:
         log.warning("Failed to parse %s: %s", mcp_config_path, e)
         _write_catalog(target, {})
-        return {}
+        return SchemaRefreshResult(catalog={}, failed_servers={"config": str(e)}, total_servers=0)
 
     servers_config = config.get("mcpServers", {})
     if not servers_config:
         log.warning("No mcpServers found in %s", mcp_config_path)
         _write_catalog(target, {})
-        return {}
+        return SchemaRefreshResult(catalog={}, failed_servers={"config": "no mcpServers found"}, total_servers=0)
 
     failed_servers: dict[str, str] = {}
 
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         # Already in an async context — run_until_complete on the current loop
         # would block the running loop. Fall back to a sync no-op with warning.
         log.warning("Cannot run --refresh-schemas from within an async context. "
                      "This command must be called from a synchronous entry point.")
         _write_catalog(target, {})
-        return {}
+        return SchemaRefreshResult(
+            catalog={},
+            failed_servers={"async": "cannot run from async context"},
+            total_servers=0,
+        )
     except RuntimeError:
         # No running event loop — safe to call asyncio.run()
         catalog = asyncio.run(_refresh_all_servers(servers_config, failed_servers))
@@ -274,11 +317,8 @@ def refresh_schema_catalog(output_path: Path | None = None) -> dict[str, list[di
     _write_catalog(target, catalog)
 
     # Log summary
-    total = len(servers_config)
+    total = sum(1 for name, conf in servers_config.items() if _is_queryable_server(name, conf))
     succeeded = len(catalog)
-    skipped = sum(1 for s in servers_config if _is_self_server(
-        s, servers_config[s].get("command", ""), servers_config[s].get("args", []),
-    ))
     if failed_servers:
         log.info("Failed servers (%d):", len(failed_servers))
         for s, err in failed_servers.items():
@@ -289,7 +329,7 @@ def refresh_schema_catalog(output_path: Path | None = None) -> dict[str, list[di
     else:
         log.info("Refresh succeeded for %d/%d servers.", succeeded, total)
 
-    return catalog
+    return SchemaRefreshResult(catalog=catalog, failed_servers=dict(failed_servers), total_servers=total)
 
 
 def load_catalog(path: Path | None = None) -> dict[str, list[SchemaEntry]]:
