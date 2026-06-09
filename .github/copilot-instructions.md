@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions — archolith-mcp-audit
+# GitHub Copilot Instructions — archolith-audit
 
 Before suggesting or generating code, read all files in the `.agent/` directory.
 

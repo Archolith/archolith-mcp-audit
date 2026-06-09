@@ -1,4 +1,4 @@
-# archolith-mcp-audit - Gemini Instructions
+# archolith-audit - Gemini Instructions
 
 Before performing any tasks, research, or code modifications, you **MUST** read the contents of the [`.agent/`](.agent/) directory.
 

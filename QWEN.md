@@ -1,4 +1,4 @@
-# archolith-mcp-audit - Qwen Instructions
+# archolith-audit - Qwen Instructions
 
 Before performing any tasks, research, or code modifications, you **MUST** read the contents of the [`.agent/`](.agent/) directory.
 

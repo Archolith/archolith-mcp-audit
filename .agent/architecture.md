@@ -86,7 +86,7 @@ Session logs (JSONL / SQLite)
 ### In-Session Flow (MCP Server + Telemetry Bridge)
 
 ```
-RTK filter_output() runs on each tool result
+archolith-filter filter_output() runs on each tool result
         │
         ├── Normal path: filtered result → model context
         │
@@ -95,7 +95,7 @@ RTK filter_output() runs on each tool result
                 ▼
         ┌──────────────────────┐
         │  Telemetry Bridge    │  Connects telemetry sources to accumulator
-        │  (telemetry_bridge)   │  Sources: RTK, file, in-memory, direct push
+        │  (telemetry_bridge)   │  Sources: archolith-filter, file, in-memory, direct push
         └──────────┬───────────┘
                    │
                    ▼
@@ -116,10 +116,10 @@ RTK filter_output() runs on each tool result
         └──────────┬───────────────────────┘
                    │
                    ▼
-           mcp_audit_summary()      — all active sessions, named
-           mcp_audit_detail()       — per-session server breakdown
-           mcp_audit_check()        — worst-case across sessions
-           mcp_audit_bridge_status() — per-session source status
+           mcp_audit_summary()         — all active sessions, named
+           mcp_audit_detail()          — per-session server breakdown
+           mcp_audit_check()           — worst-case across sessions
+           mcp_audit_bridge_status()   — per-session source status
 ```
 
 The accumulator is passive — it reads telemetry that already exists. No new pipeline stage, no interception, no overhead on the filter path.
@@ -135,14 +135,19 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 | `cli.py` | Argparse CLI entry point |
 | `attributor.py` | Tool name → MCP server mapping (configurable) |
 | `tokenizer.py` | tiktoken integration for token counting |
-| `waste_detector.py` | 6 waste pattern detectors |
+| `waste_detector.py` | Orchestrator for 6 waste pattern detectors |
+| `detectors/` | Subpackage: polling, oversized, redundant_fields, schema_cost, format_waste, cache_breaker |
+| `detectors/_helpers.py` | Shared helpers for detector implementations |
 | `report.py` | Report card generation (text, JSON, markdown) |
 | `schema_estimator.py` | MCP tool schema token cost in system prompt |
 | `comparator.py` | Before/after comparison mode |
 | `mcp_server.py` | In-session MCP audit tool (summary/detail/check/bridge_status) |
-| `accumulator.py` | Live per-session token accumulator (reads RTK telemetry) |
-| `telemetry_bridge.py` | Connects telemetry sources (RTK, file, in-memory) to accumulator |
-| `hook_observer.py` | Platform-specific hook observers (Claude Code, Codex, OpenCode) |
+| `accumulator.py` | Live per-session token accumulator (reads archolith-filter telemetry) |
+| `telemetry_bridge.py` | Connects telemetry sources (archolith-filter, file, in-memory) to accumulator |
+| `hook_observer.py` | Base hook observer interface |
+| `hook_observer_codex.py` | Codex shell hook observer |
+| `hook_observer_standalone.py` | Standalone file-based hook observer |
+| `hook_session_start.py` | Session startup hook (writes session metadata) |
 | `extractors/base.py` | SessionData dataclass + shared interface |
 | `extractors/claude.py` | Claude JSONL extraction |
 | `extractors/codex.py` | Codex JSONL extraction |
@@ -168,7 +173,7 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 | `MCP_AUDIT_MAX_SHARE` | CI: max per-server token share (%) | 20 |
 | `MCP_AUDIT_MAX_TOTAL_MCP` | CI: max total MCP share (%) | 40 |
 | `MCP_AUDIT_MAX_WASTE_PCT` | CI: max waste per server (%) | 50 |
-| `MCP_AUDIT_RTK` | Connect to RTK FilterTelemetryStore | 0 (disabled) |
+| `MCP_AUDIT_RTK` | Connect to archolith-filter FilterTelemetryStore | 0 (disabled) |
 | `MCP_AUDIT_TELEMETRY_FILE` | Path to JSONL telemetry file | (none) |
 
 ## External Dependencies
@@ -184,7 +189,7 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 
 | Project | Relationship |
 |---------|-------------|
-| archolith-filter (archolith-filter) | Shares extraction patterns. archolith-filter's FilterTelemetryStore feeds the live accumulator. Audit measures what filter compresses; filter compresses what audit flags. |
-| archolith-proxy (archolith-context) | Audit is the L3 measurement layer; proxy is L4 session curation. Audit findings drive server-side fixes that reduce the token volume the proxy has to manage. |
+| archolith-filter | Shares extraction patterns. archolith-filter's FilterTelemetryStore feeds the live accumulator. Audit measures what filter compresses; filter compresses what audit flags. |
+| archolith-context | Audit is the L3 measurement layer; context is L4 session curation. Audit findings drive server-side fixes that reduce the token volume the context layer has to manage. |
 | archolith-memory | Independent. Memory handles cross-session knowledge; audit handles per-session token measurement. |
-| archolith.dev | Product site. Audit ships as a standalone product (Wave 2b). |
+| archolith.dev | Product site. Audit ships as a standalone product. |

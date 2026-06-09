@@ -130,7 +130,10 @@ class FilterTelemetrySource:
                 if tool_name is None:
                     tool_name = getattr(rec, "tool", "unknown")
                     if not warned_fallback["tool_name"]:
-                        log.warning("archolith-filter record missing 'tool_name', falling back to 'tool': '%s'", tool_name)
+                        log.warning(
+                            "archolith-filter record missing 'tool_name', falling back to 'tool': '%s'",
+                            tool_name,
+                        )
                         warned_fallback["tool_name"] = True
 
                 raw_chars = getattr(rec, "raw_chars", None)

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from archolith_mcp_audit.extractors.base import SessionData, ToolCall, ToolResult
 
+__all__ = ["extract_session"]
+
 
 def extract_session(jsonl_path: str | Path, max_results: int | None = None) -> SessionData:
     """Extract session data from a Claude JSONL file.

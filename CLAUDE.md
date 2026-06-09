@@ -1,4 +1,4 @@
-# archolith-mcp-audit
+# archolith-audit
 
 MCP token usage audit system. Measures per-server token cost, detects waste patterns, and produces report cards with concrete optimization suggestions.
 
@@ -34,4 +34,4 @@ See `.agent/architecture.md` for full system design.
 - **Server attribution**: Tool names like `mcp__vps__vps_status` are mapped to canonical server names (e.g., `vps`)
 - **Waste detection**: Six pattern detectors flag polling waste, oversized results, redundant fields, schema cost, format waste, and cache breakers
 - **Report cards**: Per-server reports with concrete optimization suggestions and estimated savings
-- **Live accumulator**: In-session MCP tool reads RTK telemetry for real-time token budget visibility
+- **Live accumulator**: In-session MCP tool reads archolith-filter telemetry for real-time token budget visibility

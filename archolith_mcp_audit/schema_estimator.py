@@ -18,9 +18,21 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from archolith_mcp_audit.detectors.schema_cost import AVG_SCHEMA_TOKENS
 from archolith_mcp_audit.tokenizer import estimate_tokens
 
 log = logging.getLogger(__name__)
+
+__all__ = [
+    "SchemaEntry",
+    "ServerSchemaCost",
+    "SchemaRefreshResult",
+    "refresh_schema_catalog",
+    "load_catalog",
+    "estimate_server_schema_cost",
+    "compute_all_schema_costs",
+    "count_schema_tokens",
+]
 
 _DEFAULT_CATALOG_PATH = Path(__file__).parent / "data" / "schema_catalog.json"
 _STALE_DAYS = 30
@@ -54,7 +66,7 @@ class ServerSchemaCost:
 
 
 def _is_self_server(name: str, command: str, args: list[str]) -> bool:
-    """Check whether an MCP server entry refers to archolith-mcp-audit itself.
+    """Check whether an MCP server entry refers to archolith-audit itself.
 
     Two checks:
       1. Server name matches ``archolith-audit``.
@@ -174,7 +186,7 @@ async def _refresh_all_servers(
 
         # Skip self
         if _is_self_server(server_name, command, args):
-            log.info("Skipping archolith-mcp-audit itself (%s)", server_name)
+            log.info("Skipping archolith-audit itself (%s)", server_name)
             continue
 
         # Only stdio transport is supported (command field present)
@@ -378,7 +390,7 @@ def estimate_server_schema_cost(
     server: str,
     tool_names: list[str],
     total_turns: int = 1,
-    avg_schema_tokens: int = 300,
+    avg_schema_tokens: int = AVG_SCHEMA_TOKENS,
 ) -> ServerSchemaCost:
     """Estimate schema cost for a server when no catalog is available.
 

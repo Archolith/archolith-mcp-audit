@@ -8,6 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+__all__ = [
+    "ServerDelta",
+    "compare_reports",
+    "format_delta_report",
+]
+
 
 @dataclass
 class ServerDelta:

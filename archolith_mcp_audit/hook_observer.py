@@ -38,6 +38,15 @@ from archolith_mcp_audit.telemetry_bridge import (
 
 log = logging.getLogger(__name__)
 
+__all__ = [
+    "HookEvent",
+    "HookObserver",
+    "ClaudeCodeHookObserver",
+    "CodexHookObserver",
+    "OpenCodeHookObserver",
+    "create_observer",
+]
+
 
 @dataclass
 class HookEvent:
@@ -309,6 +318,4 @@ def create_observer(
         log.warning("Unknown platform '%s', falling back to generic HookObserver", platform)
         return HookObserver(bridge=bridge, telemetry_file=telemetry_file)
 
-    if platform == "codex":
-        return observer_cls(bridge=bridge, telemetry_file=telemetry_file)
     return observer_cls(bridge=bridge, telemetry_file=telemetry_file)

@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from archolith_mcp_audit.report import AuditReport
 
+__all__ = [
+    "check_thresholds",
+    "run_ci_check",
+]
+
 
 def check_thresholds(
     report: AuditReport,

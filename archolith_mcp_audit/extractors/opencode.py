@@ -8,6 +8,8 @@ from pathlib import Path
 
 from archolith_mcp_audit.extractors.base import SessionData, ToolCall, ToolResult
 
+__all__ = ["extract_session"]
+
 
 def extract_session(
     sqlite_path: str | Path,
@@ -22,77 +24,81 @@ def extract_session(
     db = sqlite3.connect(str(path))
     c = db.cursor()
 
-    # Find sessions
-    if session_id:
-        sessions = [session_id]
-    else:
-        try:
-            sessions = [row[0] for row in c.execute(
-                "SELECT DISTINCT json_extract(data, '$.session_id') FROM part "
-                "WHERE json_extract(data, '$.session_id') IS NOT NULL LIMIT 100"
-            )]
-        except sqlite3.OperationalError:
-            # json_extract fails on malformed JSON — fall back to empty
-            sessions = []
+    try:
+        # Find sessions
+        if session_id:
+            sessions = [session_id]
+        else:
+            try:
+                sessions = [row[0] for row in c.execute(
+                    "SELECT DISTINCT json_extract(data, '$.session_id') FROM part "
+                    "WHERE json_extract(data, '$.session_id') IS NOT NULL LIMIT 100"
+                )]
+            except sqlite3.OperationalError:
+                # json_extract fails on malformed JSON — fall back to empty
+                sessions = []
 
-    # Use first session if not specified
-    effective_session = sessions[0] if sessions else "unknown"
+        # Use first session if not specified
+        effective_session = sessions[0] if sessions else "unknown"
 
-    # Extract tool parts — use parameterized query to prevent SQL injection
-    # JSON can have optional whitespace after colons, so match both "type":"tool" and "type": "tool"
-    params: list[str | int] = []
-    if effective_session and effective_session != "unknown":
-        query = "SELECT data FROM part WHERE data LIKE ? AND data LIKE ? LIMIT ?"
-        params = ['%"type":%"tool"%', f'%"session_id":%"{effective_session}"%', limit]
-    else:
-        query = "SELECT data FROM part WHERE data LIKE ? LIMIT ?"
-        params = ['%"type":%"tool"%', limit]
+        # Escape LIKE special characters (% and _) in effective_session
+        escaped_session = effective_session.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-    tool_calls: list[ToolCall] = []
-    tool_results: list[ToolResult] = []
-    turn_number = 0
+        # Extract tool parts — use parameterized query to prevent SQL injection
+        # JSON can have optional whitespace after colons, so match both "type":"tool" and "type": "tool"
+        params: list[str | int] = []
+        if effective_session and effective_session != "unknown":
+            query = "SELECT data FROM part WHERE data LIKE ? AND data LIKE ? ESCAPE '\\' LIMIT ?"
+            params = ['%"type":%"tool"%', f'%"session_id":%"{escaped_session}"%', limit]
+        else:
+            query = "SELECT data FROM part WHERE data LIKE ? LIMIT ?"
+            params = ['%"type":%"tool"%', limit]
 
-    for row in c.execute(query, params):
-        try:
-            data = json.loads(row[0])
-        except (json.JSONDecodeError, TypeError):
-            continue
+        tool_calls: list[ToolCall] = []
+        tool_results: list[ToolResult] = []
+        turn_number = 0
 
-        tool_name = data.get("tool", "unknown")
-        state = data.get("state", {})
-        if not isinstance(state, dict):
-            continue
+        for row in c.execute(query, params):
+            try:
+                data = json.loads(row[0])
+            except (json.JSONDecodeError, TypeError):
+                continue
 
-        turn_number += 1
+            tool_name = data.get("tool", "unknown")
+            state = data.get("state", {})
+            if not isinstance(state, dict):
+                continue
 
-        # Extract call arguments
-        call_input = state.get("input", "")
-        if isinstance(call_input, dict):
-            call_input = json.dumps(call_input)
+            turn_number += 1
 
-        tool_calls.append(ToolCall(
-            tool_name=tool_name,
-            args=call_input or "",
-            call_id=data.get("id", f"opencode-{turn_number}"),
-            turn_number=turn_number,
-        ))
+            # Extract call arguments
+            call_input = state.get("input", "")
+            if isinstance(call_input, dict):
+                call_input = json.dumps(call_input)
 
-        # Extract result
-        output = state.get("output", "")
-        if output:
-            tool_results.append(ToolResult(
+            tool_calls.append(ToolCall(
                 tool_name=tool_name,
-                result_text=output,
+                args=call_input or "",
                 call_id=data.get("id", f"opencode-{turn_number}"),
                 turn_number=turn_number,
             ))
 
-    db.close()
+            # Extract result
+            output = state.get("output", "")
+            if output:
+                tool_results.append(ToolResult(
+                    tool_name=tool_name,
+                    result_text=output,
+                    call_id=data.get("id", f"opencode-{turn_number}"),
+                    turn_number=turn_number,
+                ))
 
-    return SessionData(
-        source="opencode",
-        session_id=effective_session,
-        tool_calls=tool_calls,
-        tool_results=tool_results,
-        total_turns=turn_number,
-    )
+        return SessionData(
+            source="opencode",
+            session_id=effective_session,
+            tool_calls=tool_calls,
+            tool_results=tool_results,
+            total_turns=turn_number,
+        )
+    finally:
+        db.close()

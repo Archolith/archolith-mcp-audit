@@ -45,6 +45,6 @@ See `.agent/workflows/code_conventions.md` for full rules. Key points:
 
 - This is a **diagnostic tool** — it measures and reports, it does NOT modify MCP traffic
 - Token counting uses tiktoken as a proxy for Anthropic's tokenizer (known limitation, documented)
-- The live accumulator reads RTK's FilterTelemetryStore; it does NOT add pipeline stages
+- The live accumulator reads archolith-filter's FilterTelemetryStore; it does NOT add pipeline stages
 - Waste detectors use heuristics and will have false positives/negatives — start conservative, tune later
 - Server mapping and schema catalog are configurable JSON files in `data/`

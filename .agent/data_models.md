@@ -214,7 +214,7 @@ Before/after comparison for a single server.
 | Server mapping | `data/server_mapping.json` | Loaded by attributor |
 | Schema catalog | `data/schema_catalog.json` | Loaded by schema_estimator |
 | Session logs | External (Claude/Codex/OpenCode paths) | Read by extractors |
-| Live telemetry | In-memory (RTK FilterTelemetryStore) | Read by accumulator |
+| Live telemetry | In-memory (archolith-filter FilterTelemetryStore) | Read by accumulator |
 | Telemetry file | JSONL (configurable path) | Read by FileTelemetrySource |
 
 ## Telemetry Bridge Entities
@@ -250,7 +250,7 @@ A single hook event from an LLM platform.
 
 | Source | Class | Description |
 |--------|-------|-------------|
-| RTK | `RtkTelemetrySource` | Reads from archolith-filter FilterTelemetryStore |
+| Filter | `FilterTelemetrySource` (alias: `RtkTelemetrySource`) | Reads from archolith-filter FilterTelemetryStore |
 | File | `FileTelemetrySource` | Reads incremental JSONL observations |
 | In-Memory | `InMemoryTelemetrySource` | Programmatic push for in-process callbacks |
 
