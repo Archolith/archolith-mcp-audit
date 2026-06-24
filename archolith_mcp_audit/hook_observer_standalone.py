@@ -26,6 +26,25 @@ import sys
 from pathlib import Path
 
 SESSIONS_DIR = Path.home() / ".archolith" / "sessions"
+_UNSAFE_SESSION_CHARS = "/\\\x00\r\n\t"
+
+
+def _safe_session_id(session_id: str) -> str:
+    cleaned = session_id
+    for char in _UNSAFE_SESSION_CHARS:
+        cleaned = cleaned.replace(char, "_")
+    cleaned = cleaned.replace("..", "_").strip()
+    return cleaned if cleaned.strip("._") else "current"
+
+
+def _append_jsonl(path: Path, line: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (line.rstrip("\n") + "\n").encode("utf-8")
+    fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    try:
+        os.write(fd, payload)
+    finally:
+        os.close(fd)
 
 # ---------------------------------------------------------------------------
 # Token counting — tiktoken when available, chars/4 fallback
@@ -59,9 +78,9 @@ def main() -> None:
     # Claude Code substitutes $CLAUDE_SESSION_ID in the hook command string.
     session_id = "current"
     if len(sys.argv) > 1 and sys.argv[1].strip():
-        session_id = sys.argv[1].strip()
+        session_id = _safe_session_id(sys.argv[1].strip())
     elif os.environ.get("MCP_AUDIT_SESSION_ID"):
-        session_id = os.environ["MCP_AUDIT_SESSION_ID"]
+        session_id = _safe_session_id(os.environ["MCP_AUDIT_SESSION_ID"])
 
     # Read stdin — agent sends the full PostToolUse payload as JSON.
     try:
@@ -94,7 +113,6 @@ def main() -> None:
     # filtered_tokens == raw_tokens means passthrough (no archolith-filter active).
     # When archolith-filter is active, RtkTelemetrySource overwrites filtered counts.
     try:
-        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         entry = json.dumps({
             "tool_name": tool_name,
             "raw_tokens": tokens,
@@ -105,8 +123,7 @@ def main() -> None:
             "timestamp": datetime.datetime.now(datetime.UTC).timestamp(),
             "session_id": session_id,
         })
-        with open(SESSIONS_DIR / f"{session_id}.jsonl", "a", encoding="utf-8") as f:
-            f.write(entry + "\n")
+        _append_jsonl(SESSIONS_DIR / f"{session_id}.jsonl", entry)
     except Exception:
         pass  # never block the agent
 

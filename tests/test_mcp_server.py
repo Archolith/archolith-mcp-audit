@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
+import os
+
 from archolith_mcp_audit.accumulator import LiveAccumulator
-from archolith_mcp_audit.mcp_server import get_accumulator, get_bridge
+from archolith_mcp_audit.mcp_server import get_accumulator, get_bridge, list_active_sessions
 from archolith_mcp_audit.telemetry_bridge import TelemetryBridge
 from archolith_mcp_audit.waste_detector import WasteFinding
 
@@ -54,6 +57,29 @@ class TestGetBridge:
         bridge_a = get_bridge("bridge-session-a-unique")
         bridge_b = get_bridge("bridge-session-b-unique")
         assert bridge_a is not bridge_b
+
+
+class TestListActiveSessions:
+    """Tests for active-session directory scan caching."""
+
+    def test_list_active_sessions_uses_ttl_cache(self, monkeypatch, tmp_path) -> None:
+        import archolith_mcp_audit.mcp_server as ms
+
+        monkeypatch.setattr(ms, "SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr(ms, "ACTIVE_SESSION_CACHE_TTL_SECONDS", 30.0)
+        monkeypatch.setattr(ms.time, "time", lambda: 1000.0)
+        ms._reset_caches()
+
+        (tmp_path / "first.jsonl").write_text("", encoding="utf-8")
+        os.utime(tmp_path / "first.jsonl", (900.0, 900.0))
+        assert list_active_sessions() == ["first"]
+
+        (tmp_path / "second.jsonl").write_text("", encoding="utf-8")
+        os.utime(tmp_path / "second.jsonl", (950.0, 950.0))
+        assert list_active_sessions() == ["first"]
+
+        monkeypatch.setattr(ms.time, "time", lambda: 1031.0)
+        assert list_active_sessions() == ["second", "first"]
 
 
 class TestMcpAuditSummaryOutput:
@@ -110,6 +136,31 @@ class TestMcpAuditDetailWithFindings:
         assert "gradle" in summary
         assert len(summary["gradle"]["waste_findings"]) == 1
         assert summary["gradle"]["waste_findings"][0].waste_type == "polling"
+
+    def test_detail_handles_missing_summary_fields(self, monkeypatch) -> None:
+        """mcp_audit_detail should not KeyError on partial accumulator payloads."""
+        monkeypatch.setenv("MCP_AUDIT_ENABLED", "1")
+        import archolith_mcp_audit.mcp_server as ms
+
+        ms = importlib.reload(ms)
+
+        class FakeBridge:
+            def sync(self) -> None:
+                return None
+
+        class FakeAccumulator:
+            def get_server_summary(self) -> dict:
+                return {"gradle": {"call_count": 1}}
+
+        monkeypatch.setattr(ms, "list_active_sessions", lambda: ["session-a"])
+        monkeypatch.setattr(ms, "get_bridge", lambda session_id: FakeBridge())
+        monkeypatch.setattr(ms, "get_accumulator", lambda session_id: FakeAccumulator())
+        monkeypatch.setattr(ms, "get_session_name", lambda session_id: "session-a")
+
+        result = ms.mcp_audit_detail("gradle")
+
+        assert "gradle" in result
+        assert "(unknown)" in result
 
 
 class TestMcpAuditCheckThresholds:
