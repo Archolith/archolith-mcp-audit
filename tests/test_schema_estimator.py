@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 import tempfile
 import types
@@ -13,6 +14,7 @@ from archolith_mcp_audit.schema_estimator import (
     SchemaEntry,
     ServerSchemaCost,
     _is_self_server,
+    _warn_secret_like_env,
     compute_all_schema_costs,
     count_schema_tokens,
     estimate_server_schema_cost,
@@ -84,6 +86,22 @@ class TestLoadCatalog:
             assert "memory" in catalog
             assert catalog["memory"][0].tool_name == "query_structure"
             assert catalog["memory"][0].schema_tokens == 350
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_empty_catalog_warns_about_heuristic_schema_costs(self, caplog) -> None:
+        """Empty catalog warns that schema-cost findings use AVG_SCHEMA_TOKENS defaults."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({}, f)
+            path = Path(f.name)
+
+        try:
+            with caplog.at_level(logging.WARNING):
+                catalog = load_catalog(path)
+
+            assert catalog == {}
+            assert "AVG_SCHEMA_TOKENS=300" in caplog.text
+            assert "--refresh-schemas" in caplog.text
         finally:
             path.unlink(missing_ok=True)
 
@@ -216,6 +234,23 @@ class TestIsSelfServer:
         assert _is_self_server(
             "gradle", "python.exe", ["-m", "archolith_mcp_audit.cli"]
         )
+
+
+class TestEnvTrustWarnings:
+    """Tests for .mcp.json env trust-model warnings."""
+
+    def test_secret_like_env_key_warns(self, caplog) -> None:
+        with caplog.at_level(logging.WARNING):
+            _warn_secret_like_env("vps", {"API_TOKEN": "redacted", "PATH": "x"})
+
+        assert "API_TOKEN" in caplog.text
+        assert "does not filter configured env" in caplog.text
+
+    def test_non_secret_env_key_does_not_warn(self, caplog) -> None:
+        with caplog.at_level(logging.WARNING):
+            _warn_secret_like_env("vps", {"PATH": "x", "HOME": "y"})
+
+        assert caplog.text == ""
 
 
 class TestRefreshSchemaCatalog:
