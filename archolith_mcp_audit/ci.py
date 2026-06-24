@@ -56,6 +56,7 @@ def check_thresholds(
 
     # Check waste percentage per server
     for server_name, sr in report.servers.items():
+        # Guard token_share > 0 so empty/new-server reports do not report a meaningless waste percentage.
         if sr.token_share > 0 and sr.estimated_recoverable_tokens > 0:
             waste_pct = sr.estimated_recoverable_tokens / sr.token_share * 100
             if waste_pct > max_waste_pct:

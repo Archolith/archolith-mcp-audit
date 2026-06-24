@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import shutil
 import sys
@@ -75,8 +74,8 @@ def _ensure_tiktoken() -> bool:
     if installed:
         return True
 
-    print(f"  tiktoken is not installed.")
-    print(f"  Without it the hook uses a rough chars/4 estimate instead of real token counts.")
+    print("  tiktoken is not installed.")
+    print("  Without it the hook uses a rough chars/4 estimate instead of real token counts.")
     print(f"  Install command: {sys.executable} -m pip install tiktoken")
     print()
     if not _confirm("  Install tiktoken now?", default=True):
@@ -94,7 +93,7 @@ def _ensure_tiktoken() -> bool:
         if installed:
             print(f"  tiktoken {info} installed successfully.")
             return True
-    print(f"  pip install failed — install manually: pip install tiktoken")
+    print("  pip install failed — install manually: pip install tiktoken")
     if result.stderr:
         print(f"  Error: {result.stderr.strip()[:200]}")
     return False
@@ -173,11 +172,11 @@ CLAUDE_MCP_SERVER_ENTRY = {
 
 def install_claude() -> None:
     print("\n=== Claude Code ===")
-    print(f"  This will:")
+    print("  This will:")
     print(f"  1. Copy hook shim to: {CLAUDE_HOOK_DEST}")
     print(f"  2. Add PostToolUse hook to: {CLAUDE_SETTINGS}")
     print(f"  3. Add SessionStart hook to: {CLAUDE_SETTINGS}")
-    print(f"  4. Register MCP server in: <nearest .mcp.json>")
+    print("  4. Register MCP server in: <nearest .mcp.json>")
     print()
 
     if not _confirm("Proceed with Claude Code installation?", default=True):
@@ -309,7 +308,7 @@ def _register_claude_mcp_server() -> None:
 def uninstall_claude() -> None:
     print("\n=== Claude Code — Uninstall ===")
     print(f"  This will remove the PostToolUse and SessionStart hook entries from {CLAUDE_SETTINGS}.")
-    print(f"  The hook shim files will NOT be deleted.")
+    print("  The hook shim files will NOT be deleted.")
     print()
     if not _confirm("Proceed with uninstall?", default=False):
         print("  Aborted.")
@@ -362,7 +361,7 @@ CODEX_HOOK_DEST = HOME / ".codex" / "hooks" / "archolith-audit-observer.py"
 
 def install_codex() -> None:
     print("\n=== Codex ===")
-    print(f"  This will:")
+    print("  This will:")
     print(f"  1. Copy hook shim to: {CODEX_HOOK_DEST}")
     print(f"  2. Add PostToolUse entry to: {CODEX_HOOKS_JSON}")
     print(f"  3. Register MCP server in: {HOME / '.codex' / 'mcp.json'}")
@@ -475,7 +474,7 @@ def check_status() -> None:
                 mcp_registered = True
                 break
 
-    print(f"  Claude Code:")
+    print("  Claude Code:")
     print(f"    Hook shim installed: {OK if claude_shim else FAIL} {CLAUDE_HOOK_DEST}")
     print(f"    PostToolUse hook:   {OK if claude_hook else FAIL} {CLAUDE_SETTINGS}")
     print(f"    Session start shim: {OK if claude_session_shim else FAIL} {CLAUDE_SESSION_START_DEST}")
@@ -491,23 +490,23 @@ def check_status() -> None:
         "archolith-audit-observer" in h.get("command", "")
         for h in codex_cfg.get("PostToolUse", [])
     )
-    print(f"\n  Codex:")
+    print("\n  Codex:")
     print(f"    Hook shim installed: {OK if CODEX_HOOK_DEST.exists() else FAIL} {CODEX_HOOK_DEST}")
     print(f"    hooks.json entry:    {OK if codex_hook else FAIL} {CODEX_HOOKS_JSON}")
 
     # OpenCode / Gemini
-    print(f"\n  OpenCode: NOT IMPLEMENTED")
-    print(f"  Gemini CLI: NOT IMPLEMENTED")
+    print("\n  OpenCode: NOT IMPLEMENTED")
+    print("  Gemini CLI: NOT IMPLEMENTED")
 
     # Sessions dir
     sessions_count = len(list(SESSIONS_DIR.glob("*.jsonl"))) if SESSIONS_DIR.exists() else 0
-    print(f"\n  Telemetry:")
+    print("\n  Telemetry:")
     print(f"    Sessions dir:   {OK if SESSIONS_DIR.exists() else FAIL} {SESSIONS_DIR}")
     print(f"    Session files:  {sessions_count}")
 
     # Dependencies
     tiktoken_installed, tiktoken_info = _tiktoken_status()
-    print(f"\n  Dependencies:")
+    print("\n  Dependencies:")
     print(f"    tiktoken: {OK if tiktoken_installed else FAIL} "
           f"{tiktoken_info if tiktoken_installed else 'not installed — token counts will be approximate (chars/4)'}")
 

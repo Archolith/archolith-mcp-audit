@@ -14,7 +14,6 @@ keywords = ["mcp", "token", "audit", "llm", "optimization"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -23,6 +22,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "archolith-maintenance>=0.1.0",
     "tiktoken>=0.7",
     "fastmcp>=0.4",
 ]
@@ -46,6 +46,7 @@ addopts = "-v --tb=short"
 [tool.ruff]
 target-version = "py311"
 line-length = 120
+exclude = ["plugins", "dist"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
