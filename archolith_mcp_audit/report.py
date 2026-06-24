@@ -3,13 +3,27 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TypedDict
 
 from archolith_mcp_audit.attributor import attribute_tool
 from archolith_mcp_audit.extractors.base import SessionData
 from archolith_mcp_audit.tokenizer import count_tokens
 from archolith_mcp_audit.waste_detector import WasteFinding
+
+TOKENIZER_DISCLOSURE = (
+    "Token counts are estimates using OpenAI-compatible cl100k/o200k tokenizers; "
+    "cross-provider billing tokens may differ."
+)
+MAX_FINDINGS_PER_OUTPUT_SECTION = 1000
+
+_SEVERITY_RANK = {
+    "critical": 5,
+    "high": 4,
+    "medium": 3,
+    "low": 2,
+    "info": 1,
+}
 
 
 class _ServerSummary(TypedDict):
@@ -73,12 +87,57 @@ class AuditReport:
     total_results: int = 0
 
 
+def _dedupe_recoverable_findings(findings: list[WasteFinding]) -> list[WasteFinding]:
+    """Avoid double-counting overlapping result-token recovery claims."""
+    adjusted = list(findings)
+    claimed: set[str] = set()
+    ranked = sorted(
+        enumerate(findings),
+        key=lambda item: (
+            -_SEVERITY_RANK.get(item[1].severity, 0),
+            -item[1].tokens_wasted,
+            item[0],
+        ),
+    )
+
+    for index, finding in ranked:
+        evidence = set(finding.evidence_ids)
+        if finding.waste_type == "schema" or not evidence or finding.tokens_wasted <= 0:
+            continue
+
+        new_evidence = evidence - claimed
+        if len(new_evidence) == len(evidence):
+            claimed.update(new_evidence)
+            continue
+
+        if not new_evidence:
+            adjusted[index] = replace(
+                finding,
+                tokens_wasted=0,
+                bytes_wasted=0,
+                description=f"{finding.description} (recoverable tokens attributed to higher-priority finding)",
+            )
+        else:
+            ratio = len(new_evidence) / len(evidence)
+            adjusted[index] = replace(
+                finding,
+                tokens_wasted=int(finding.tokens_wasted * ratio),
+                bytes_wasted=int(finding.bytes_wasted * ratio),
+                description=f"{finding.description} (partial overlap deduplicated)",
+            )
+        claimed.update(new_evidence)
+
+    return adjusted
+
+
 def build_report(
     session: SessionData,
     findings: list[WasteFinding],
     server_mapping: dict[str, str] | None = None,
 ) -> AuditReport:
     """Build an AuditReport from session data and waste findings."""
+    findings = _dedupe_recoverable_findings(findings)
+
     # Count tokens per server
     server_tokens: dict[str, int] = {}
     server_calls: dict[str, int] = {}
@@ -157,6 +216,7 @@ def format_report_text(report: AuditReport) -> str:
     lines.append("MCP TOKEN AUDIT REPORT")
     lines.append(f"Session: {report.source} ({report.session}), "
                  f"{report.total_results:,} tool results")
+    lines.append(f"Tokenizer: {TOKENIZER_DISCLOSURE}")
     lines.append("=" * 80)
     lines.append("")
 
@@ -188,13 +248,18 @@ def format_report_text(report: AuditReport) -> str:
 
         if summary['findings']:
             lines.append("  Waste findings:")
-            for f in summary['findings']:
+            visible_findings = summary['findings'][:MAX_FINDINGS_PER_OUTPUT_SECTION]
+            for f in visible_findings:
                 sev = f.severity.upper()
-                lines.append(f"    [{sev:>8}]  {f.waste_type}")
+                lines.append(f"    [{sev:>8}]  {f.waste_type} ({f.confidence} confidence)")
                 lines.append(f"      {f.description}")
                 lines.append(f"      Wasted: {f.tokens_wasted:,} tokens")
                 lines.append(f"      Suggestion: {f.suggestion}")
                 lines.append(f"      Est. savings: {f.estimated_savings_pct:.0f}%")
+                lines.append("")
+            hidden_count = len(summary['findings']) - len(visible_findings)
+            if hidden_count > 0:
+                lines.append(f"    ... {hidden_count:,} additional findings omitted from text output")
                 lines.append("")
         else:
             lines.append("  No waste detected.")
@@ -242,6 +307,10 @@ def format_report_json(report: AuditReport) -> str:
         "total_recoverable_tokens": report.total_recoverable_tokens,
         "total_recoverable_pct": round(report.total_recoverable_pct, 1),
         "schema_tokens_wasted": report.schema_tokens_wasted,
+        "tokenizer": {
+            "encodings": ["cl100k_base", "o200k_base"],
+            "disclosure": TOKENIZER_DISCLOSURE,
+        },
     }
 
     for server_name, sr in report.servers.items():
@@ -250,10 +319,13 @@ def format_report_json(report: AuditReport) -> str:
             "token_share_pct": round(sr.token_share_pct, 1),
             "call_count": sr.call_count,
             "tools": sr.tools,
+            "findings_total": len(sr.findings),
+            "findings_truncated": len(sr.findings) > MAX_FINDINGS_PER_OUTPUT_SECTION,
             "findings": [
                 {
                     "waste_type": f.waste_type,
                     "severity": f.severity,
+                    "confidence": f.confidence,
                     "tokens_wasted": f.tokens_wasted,
                     "call_count": f.call_count,
                     "total_calls": f.total_calls,
@@ -261,7 +333,7 @@ def format_report_json(report: AuditReport) -> str:
                     "suggestion": f.suggestion,
                     "estimated_savings_pct": f.estimated_savings_pct,
                 }
-                for f in sr.findings
+                for f in sr.findings[:MAX_FINDINGS_PER_OUTPUT_SECTION]
             ],
             "estimated_recoverable_tokens": sr.estimated_recoverable_tokens,
         }
@@ -271,6 +343,7 @@ def format_report_json(report: AuditReport) -> str:
             "server": f.server,
             "waste_type": f.waste_type,
             "severity": f.severity,
+            "confidence": f.confidence,
             "tokens_wasted": f.tokens_wasted,
             "suggestion": f.suggestion,
             "estimated_savings_pct": f.estimated_savings_pct,
@@ -283,6 +356,8 @@ def format_report_markdown(report: AuditReport) -> str:
     """Format audit report as Markdown."""
     lines = []
     lines.append(f"# MCP Token Audit Report — {report.source} ({report.session})")
+    lines.append("")
+    lines.append(f"> {TOKENIZER_DISCLOSURE}")
     lines.append("")
 
     # Overview table
@@ -315,11 +390,15 @@ def format_report_markdown(report: AuditReport) -> str:
         lines.append("")
 
         if summary['findings']:
-            lines.append("| Severity | Type | Description | Tokens wasted | Savings % |")
-            lines.append("|----------|------|-------------|--------------|-----------|")
-            for f in summary['findings']:
-                lines.append(f"| {f.severity} | {f.waste_type} | {f.description} | "
+            lines.append("| Severity | Confidence | Type | Description | Tokens wasted | Savings % |")
+            lines.append("|----------|------------|------|-------------|--------------|-----------|")
+            visible_findings = summary['findings'][:MAX_FINDINGS_PER_OUTPUT_SECTION]
+            for f in visible_findings:
+                lines.append(f"| {f.severity} | {f.confidence} | {f.waste_type} | {f.description} | "
                              f"{f.tokens_wasted:,} | {f.estimated_savings_pct:.0f}% |")
+            hidden_count = len(summary['findings']) - len(visible_findings)
+            if hidden_count > 0:
+                lines.append(f"| info | low | truncated | {hidden_count:,} additional findings omitted | 0 | 0% |")
             lines.append("")
 
     # Summary
