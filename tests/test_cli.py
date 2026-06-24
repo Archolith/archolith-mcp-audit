@@ -8,7 +8,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from archolith_mcp_audit.cli import main
+from archolith_mcp_audit.report import AuditReport, ServerReport
 from archolith_mcp_audit.schema_estimator import SchemaRefreshResult
+from archolith_mcp_audit.waste_detector import WasteFinding
 
 
 class TestCliComparison:
@@ -150,3 +152,62 @@ class TestCliNoSources:
             assert False, "Should have raised SystemExit"
         except SystemExit as e:
             assert e.code == 2
+
+
+class TestCliAuditModes:
+    """Test main audit mode flags without requiring real session files."""
+
+    def test_source_modes_call_runner(self) -> None:
+        for args, expected in [
+            (["--claude", "claude.jsonl"], ("claude", "claude.jsonl")),
+            (["--codex", "codex.jsonl"], ("codex", "codex.jsonl")),
+            (["--opencode", "opencode.db"], ("opencode", "opencode.db")),
+        ]:
+            with patch("archolith_mcp_audit.cli._run_audit", return_value=AuditReport(session="s")) as run:
+                assert main(args) == 0
+                assert run.call_args.args[:2] == expected
+
+    def test_server_and_min_severity_filters_apply(self, capsys) -> None:
+        high = WasteFinding(
+            tool_name="mcp__gradle__gradle_compile",
+            server="gradle",
+            waste_type="polling",
+            severity="high",
+            tokens_wasted=100,
+            bytes_wasted=200,
+            call_count=1,
+            total_calls=1,
+            description="high finding",
+            suggestion="fix gradle",
+            estimated_savings_pct=80.0,
+        )
+        low = WasteFinding(
+            tool_name="mcp__vps__vps_status",
+            server="vps",
+            waste_type="format",
+            severity="low",
+            tokens_wasted=10,
+            bytes_wasted=20,
+            call_count=1,
+            total_calls=1,
+            description="low finding",
+            suggestion="fix vps",
+            estimated_savings_pct=10.0,
+        )
+        report = AuditReport(
+            session="s",
+            servers={
+                "gradle": ServerReport(server="gradle", findings=[high]),
+                "vps": ServerReport(server="vps", findings=[low]),
+            },
+            top_optimizations=[high, low],
+        )
+
+        with patch("archolith_mcp_audit.cli._run_audit", return_value=report):
+            assert main(["--claude", "x.jsonl", "--servers", "gradle", "--min-severity", "medium"]) == 0
+
+        captured = capsys.readouterr()
+        assert "gradle" in captured.out
+        assert "vps" not in captured.out
+        assert "high finding" in captured.out
+        assert "low finding" not in captured.out
