@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import tiktoken
+from archolith_maintenance.token_accounting import count_text_tokens
 
 __all__ = [
     "TokenCount",
@@ -35,6 +37,7 @@ def _reset_encodings() -> None:
     """Clear the cached tiktoken encodings. Used in testing."""
     global _encodings
     _encodings = None
+    _count_tokens_default.cache_clear()
 
 
 def get_encodings() -> dict[str, tiktoken.Encoding]:
@@ -48,16 +51,25 @@ def get_encodings() -> dict[str, tiktoken.Encoding]:
     return _encodings
 
 
+@lru_cache(maxsize=4096)
+def _count_tokens_default(text: str) -> tuple[int, int]:
+    """Count default encodings with a bounded cache for repeated detector passes."""
+    return (
+        count_text_tokens(text, encoding="cl100k_base"),
+        count_text_tokens(text, encoding="o200k_base"),
+    )
+
+
 def count_tokens(text: str, encodings: dict[str, tiktoken.Encoding] | None = None) -> TokenCount:
     """Count tokens in text using both cl100k and o200k encodings."""
-    if encodings is None:
-        encodings = get_encodings()
-
     chars = len(text)
     byte_count = len(text.encode("utf-8"))
 
-    tokens_cl = len(encodings["cl100k_base"].encode(text))
-    tokens_o2 = len(encodings["o200k_base"].encode(text))
+    if encodings is None:
+        tokens_cl, tokens_o2 = _count_tokens_default(text)
+    else:
+        tokens_cl = len(encodings["cl100k_base"].encode(text))
+        tokens_o2 = len(encodings["o200k_base"].encode(text))
 
     cpt_cl = chars / tokens_cl if tokens_cl > 0 else 0.0
     cpt_o2 = chars / tokens_o2 if tokens_o2 > 0 else 0.0
@@ -98,6 +110,4 @@ def estimate_tokens(text: str, encoding: str = "cl100k_base") -> int:
 
     Convenience function for quick estimates.
     """
-    encodings = get_encodings()
-    enc = encodings.get(encoding, encodings["cl100k_base"])
-    return len(enc.encode(text))
+    return count_text_tokens(text, encoding=encoding)
