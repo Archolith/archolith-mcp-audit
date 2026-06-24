@@ -46,6 +46,7 @@ def main():
         "raw_chars": chars,
         "filtered_tokens": 0,  # unavailable in Codex context
         "filtered_chars": chars,
+        "filter_active": False,  # no archolith-filter pass in the hook context
         "timestamp": time.time(),
         "session_id": session_id,
     })

@@ -398,16 +398,22 @@ def write_telemetry_entry(
     filtered_chars: int = 0,
     session_id: str = "",
     metadata: dict | None = None,
+    filter_active: bool = False,
 ) -> None:
     """Append a telemetry entry to a JSONL file.
 
     Utility for hook observers and external processes that want to
     write observations to a file that can be read by FileTelemetrySource.
+
+    ``filter_active`` records whether a real filter pass produced
+    ``filtered_chars``; when False, consumers should treat the row as raw-only
+    (no savings signal) rather than as a genuine 0% filter result.
     """
     entry = {
         "tool_name": tool_name,
         "raw_chars": raw_chars,
         "filtered_chars": filtered_chars,
+        "filter_active": filter_active,
         "timestamp": time.time(),
         "session_id": session_id,
     }
