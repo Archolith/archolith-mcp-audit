@@ -111,7 +111,7 @@ A single waste detection result, attached to a server.
 | `tool_name` | `str` | Tool that produced the waste |
 | `server` | `str` | Canonical MCP server name |
 | `waste_type` | `str` | One of: `polling`, `oversized`, `redundant_fields`, `schema`, `format`, `cache_breaker` |
-| `severity` | `str` | One of: `low`, `medium`, `high`, `critical` |
+| `severity` | `str` | One of: `info`, `low`, `medium`, `high`, `critical` |
 | `tokens_wasted` | `int` | Estimated wasted tokens |
 | `bytes_wasted` | `int` | Wasted bytes |
 | `call_count` | `int` | Number of calls exhibiting this waste |
@@ -121,6 +121,8 @@ A single waste detection result, attached to a server.
 | `estimated_savings_pct` | `float` | Savings if fix applied (0-100) |
 | `example_before` | `str` | Truncated example of wasteful output |
 | `example_after` | `str` | What it could look like after fix |
+| `confidence` | `str` | `high`, `medium`, or `low`; low-confidence findings should be manually reviewed before treating them as recoverable savings |
+| `evidence_ids` | `tuple[str, ...]` | Optional call/result IDs used by report aggregation to avoid double-counting overlapping recoverable-token claims |
 
 ### ServerReport
 
@@ -155,6 +157,9 @@ Full session audit report.
 | `total_recoverable_pct` | `float` | Recoverable share of total |
 | `schema_tokens_wasted` | `int` | Tool schema overhead in system prompt (per-turn cost) |
 | `total_results` | `int` | Total tool results in session |
+
+Report JSON also includes a `tokenizer` metadata object with the estimated encodings (`cl100k_base`, `o200k_base`) and the disclosure that cross-provider billing tokens may differ.
+Per-server JSON includes `findings_total` and `findings_truncated`; the serialized findings list is capped to the report output limit while aggregate recoverable-token totals still use the full in-memory finding set.
 
 ### ServerDelta
 
@@ -194,6 +199,7 @@ Before/after comparison for a single server (from `comparator.py`).
 
 | Value | Description |
 |-------|-------------|
+| `info` | Informational finding; no recoverable-token claim |
 | `low` | <10% of server tokens wasted |
 | `medium` | 10-30% of server tokens wasted |
 | `high` | 30-60% of server tokens wasted |
@@ -213,9 +219,14 @@ Before/after comparison for a single server (from `comparator.py`).
 |------|---------|--------|
 | Server mapping | `data/server_mapping.json` | Loaded by attributor |
 | Schema catalog | `data/schema_catalog.json` | Loaded by schema_estimator |
+| Heuristic thresholds | `archolith_mcp_audit/data/heuristic_thresholds.json` | Loaded by detector config |
 | Session logs | External (Claude/Codex/OpenCode paths) | Read by extractors |
 | Live telemetry | In-memory (archolith-filter FilterTelemetryStore) | Read by accumulator |
 | Telemetry file | JSONL (configurable path) | Read by FileTelemetrySource |
+
+Session file paths are constructed through path-safety helpers. Package code uses
+`archolith_mcp_audit._paths.safe_session_path()`; standalone copied hook shims keep
+equivalent stdlib-only sanitization so they can still run without importing the package.
 
 ## Telemetry Bridge Entities
 

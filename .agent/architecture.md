@@ -16,7 +16,7 @@ over stdio subprocess communication.
 
 1. `refresh_schema_catalog()` in `schema_estimator.py` is called from `cli.py`.
 2. It locates `.mcp.json` (CWD-first, then ~/.claude/ fallback).
-3. For each configured server (sequential, not concurrent):
+3. For each configured server (queried concurrently with `asyncio.gather`):
    a. Check self-exclusion via `_is_self_server()` — skip archolith-audit.
    b. Skip entries without a `command` field (SSE/HTTP-only servers).
    c. Call `_query_server_via_fastmcp()` which wraps FastMCP `Client`:
@@ -25,8 +25,9 @@ over stdio subprocess communication.
         pagination), and graceful close.
       - 15-second `asyncio.wait_for()` timeout per server.
       - On failure, the server is recorded in `failed_servers` dict.
-4. Tool definitions are run through `count_schema_tokens()` and stored.
-5. Catalog is written to `schema_catalog.json` via `_write_catalog()`.
+4. Secret-like `.mcp.json` env key names are logged for operator review, but the env mapping is still passed through because `.mcp.json` is trusted operator configuration.
+5. Tool definitions are run through `count_schema_tokens()` and stored.
+6. Catalog is written to `schema_catalog.json` via `_write_catalog()`.
 
 ### Self-exclusion
 
@@ -45,7 +46,7 @@ over stdio subprocess communication.
 | Layer | Technology |
 |-------|-----------|
 | Language | Python 3.11+ |
-| Tokenizer | tiktoken (cl100k_base + o200k_base) |
+| Tokenizer | archolith-maintenance primitive with tiktoken (cl100k_base + o200k_base) when available |
 | MCP Server | FastMCP 0.4+ |
 | CLI | argparse |
 | Testing | pytest 8+ |
@@ -69,7 +70,7 @@ Session logs (JSONL / SQLite)
            │
            ▼
 ┌──────────────────────┐
-│  Token Counter        │  tiktoken per result (cl100k + o200k)
+│  Token Counter        │  shared primitive + bounded repeated-text token cache
 └──────────┬───────────┘
            │
            ▼
@@ -112,7 +113,7 @@ archolith-filter filter_output() runs on each tool result
                    ▼
         ┌──────────────────────────────────┐
         │  Per-session bridges             │  dict[session_id → TelemetryBridge]
-        │  list_active_sessions()          │  scans *.jsonl modified < 24h
+        │  list_active_sessions()          │  scans *.jsonl modified < 24h, cached 30s
         └──────────┬───────────────────────┘
                    │
                    ▼
@@ -126,7 +127,7 @@ The accumulator is passive — it reads telemetry that already exists. No new pi
 
 The TelemetryBridge provides a uniform interface for feeding observations from multiple backends into the accumulator. Hook observers are platform-specific listeners that convert LLM-platform events into observations.
 
-**Multi-session design:** `mcp_server.py` maintains per-session `LiveAccumulator` and `TelemetryBridge` instances keyed by `session_id`. The `SessionStart` hook (`hook_session_start.py`) fires once when a Claude Code session begins, writes a human-readable name (`YYYY-MM-DD-<project>`) to `~/.archolith/sessions/<id>.name`, and pre-touches the session JSONL file. MCP tools scan all session files modified in the last 24h and display results per session by name.
+**Multi-session design:** `mcp_server.py` maintains per-session `LiveAccumulator` and `TelemetryBridge` instances keyed by `session_id`. The `SessionStart` hook (`hook_session_start.py`) fires once when a Claude Code session begins, writes a human-readable name (`YYYY-MM-DD-<project>`) to `~/.archolith/sessions/<id>.name`, and pre-touches the session JSONL file. MCP tools scan all session files modified in the last 24h and display results per session by name. The active-session scan is cached for 30 seconds to avoid repeated directory scans/stats on every MCP tool call.
 
 ## Key Components
 
@@ -134,12 +135,14 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 |--------|---------|
 | `cli.py` | Argparse CLI entry point |
 | `attributor.py` | Tool name → MCP server mapping (configurable) |
-| `tokenizer.py` | tiktoken integration for token counting |
+| `tokenizer.py` | Audit `TokenCount` report shape backed by `archolith-maintenance` primitive text counts; caches repeated default-encoding counts |
+| `_paths.py` | Session-id sanitization plus atomic JSONL/text file-write helpers for package code |
 | `waste_detector.py` | Orchestrator for 6 waste pattern detectors |
 | `detectors/` | Subpackage: polling, oversized, redundant_fields, schema_cost, format_waste, cache_breaker |
-| `detectors/_helpers.py` | Shared helpers for detector implementations |
-| `report.py` | Report card generation (text, JSON, markdown) |
-| `schema_estimator.py` | MCP tool schema token cost in system prompt |
+| `detectors/_helpers.py` | Shared helpers for detector implementations, including evidence IDs for overlapping finding deduplication |
+| `detectors/config.py` / `data/heuristic_thresholds.json` | Configured detector thresholds and directional savings-percent assumptions |
+| `report.py` | Report card generation (text, JSON, markdown), overlapping recoverable-token deduplication, capped finding output |
+| `schema_estimator.py` | MCP tool schema token cost in system prompt; refreshes eligible servers concurrently |
 | `comparator.py` | Before/after comparison mode |
 | `mcp_server.py` | In-session MCP audit server (four tools: summary, detail, check, bridge_status) |
 | `accumulator.py` | Live per-session token accumulator (reads archolith-filter telemetry) |
@@ -157,12 +160,12 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 
 | Detector | Waste type | What it catches |
 |----------|-----------|-----------------|
-| Polling | `polling_waste` | Repeated calls with same args → unchanged result (e.g., gradle_job_status) |
-| Oversized | `oversized_envelope`, `oversized_help` | JSON envelopes, large help text |
+| Polling | `polling_waste` | Byte-identical repeated calls as high-confidence waste; similar-but-changing status loops as low-confidence informational findings |
+| Oversized | `oversized_envelope`, `oversized_help` | JSON envelopes, large help text; flag-heavy errors without help headers are ignored |
 | Redundant fields | `redundant_fields`, `overbroad_query` | Overbroad JSON results, missing field filters |
 | Schema cost | `schema` | Tool schema token overhead in system prompt |
 | Format | `format_waste_json_table`, `format_waste_key_repetition` | JSON where CSV/key-value would be shorter |
-| Cache breaker | `cache_breaker` | Content that changes per-turn but is semantically identical |
+| Cache breaker | `cache_breaker` | Content that changes per-turn but is semantically identical, including ISO timestamps, slash dates, Unix epochs, durations, UUIDs, and uptime counters |
 
 ## Configuration / Environment Variables
 
@@ -181,7 +184,8 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 
 | Dependency | Purpose | Required |
 |------------|---------|----------|
-| tiktoken | Token counting (OpenAI tokenizer proxy) | Yes (pip) |
+| archolith-maintenance | Shared token-counting primitive | Yes (pip/editable peer) |
+| tiktoken | Accurate OpenAI-tokenizer proxy used by the shared primitive | Yes (pip) |
 | FastMCP | MCP server for in-session audit | Yes (pip) |
 | archolith-filter telemetry | FilterTelemetryStore for live accumulator | Optional (in-session mode only) |
 | Claude/Codex/OpenCode session logs | Session data to audit | Required for CLI mode |

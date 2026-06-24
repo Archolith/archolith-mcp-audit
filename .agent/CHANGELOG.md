@@ -1,5 +1,22 @@
 # Changelog — archolith-audit
 
+## 2026-06-21 — Audit Remediation Sessions A/B/C/D/E/G/H
+
+- Fixed the CF-1 CLI import blocker by importing `_load_mapping` from `attributor.py`; added CLI smoke tests and synced/rebuilt plugin bundles.
+- Completed the safe-fix docs/package batch: removed the deprecated license classifier, excluded generated plugin/dist trees from Ruff, added third-party license notes, documented naming/privacy/env vars, and added empty schema-catalog warnings.
+- Hardened session file paths with sanitization plus atomic JSONL/text writes in hook/session paths; added regression tests for path safety and hook subprocess execution.
+- Added report-output tokenizer disclosures in text, JSON, and Markdown formats.
+- Documented the trusted `.mcp.json` env model and added secret-like env key warnings during schema refresh.
+- Added CLI flag coverage, hook-script subprocess tests, and defensive `mcp_audit_detail` handling for partial summary payloads.
+- Added a 30-second TTL cache for active session scans in `mcp_server.py`.
+- Tightened polling detection so byte-identical repeats are high-confidence waste while similar-but-changing loops are low-confidence informational findings; added `confidence` metadata to findings.
+- Finished the remaining heuristic/performance pass: detector savings assumptions now load from bundled config, findings carry evidence IDs for overlapping recovery deduplication, report outputs cap serialized finding lists, schema refresh queries servers concurrently, repeated token counting uses a bounded cache, and Claude/Codex JSONL extractors parse each file once.
+
+## 2026-06-21 — Shared Token Counting Primitive
+
+- Routed audit text token counting through `archolith-maintenance` while preserving the existing `TokenCount` report shape and explicit-encoding test path.
+- Added `archolith-maintenance` as the shared helper dependency for canonical token accounting.
+
 ## 2026-06-08 — audit-remediation closeout + plugin telemetry schema fix
 
 - Completed the remaining items of `archolith-mcp-audit-remediation-plan` after a
