@@ -5,9 +5,11 @@ from __future__ import annotations
 from archolith_mcp_audit.attributor import attribute_tool
 from archolith_mcp_audit.detectors._helpers import (
     WasteFinding,
+    _evidence_id,
     _json_format_overhead,
     _truncate,
 )
+from archolith_mcp_audit.detectors.config import savings_pct
 from archolith_mcp_audit.extractors.base import ToolResult
 from archolith_mcp_audit.tokenizer import count_tokens
 
@@ -31,12 +33,14 @@ def detect_format_waste(
         format_waste = 0
         format_waste_tokens = 0
         format_waste_bytes = 0
+        evidence_ids: list[str] = []
         example = ""
 
-        for r in results:
+        for index, r in enumerate(results):
             overhead = _json_format_overhead(r.result_text)
             if overhead > 0.3:
                 format_waste += 1
+                evidence_ids.append(_evidence_id(r, index))
                 tc = count_tokens(r.result_text)
                 waste_tokens = int(tc.tokens_cl100k * overhead)
                 format_waste_tokens += waste_tokens
@@ -59,9 +63,10 @@ def detect_format_waste(
                             f"(key repetition, structural markup)",
                 suggestion="Support _compact=true parameter to return "
                            "key-value lines or CSV instead of JSON objects.",
-                estimated_savings_pct=45.0,
+                estimated_savings_pct=savings_pct("format_json"),
                 example_before=example,
                 example_after="key1=value1\nkey2=value2\n...",
+                evidence_ids=tuple(evidence_ids),
             ))
 
     return findings

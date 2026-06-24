@@ -1,0 +1,20 @@
+{
+  "estimated_savings_pct": {
+    "help_text": 90.0,
+    "format_json": 45.0,
+    "cache_breaker": 40.0,
+    "schema_lazy_load": 60.0
+  },
+  "field_thresholds": {
+    "default": 10,
+    "overbroad_tool": 6
+  },
+  "overbroad_tools": [
+    "query_structure",
+    "recall_memories",
+    "artifact_read",
+    "mcp__memory__query_structure",
+    "mcp__memory__recall_memories",
+    "mcp__workspace-artifacts__artifact_read"
+  ]
+}

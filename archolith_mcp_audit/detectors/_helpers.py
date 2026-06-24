@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # ---------------------------------------------------------------------------
 # Public data structures
@@ -28,6 +28,8 @@ class WasteFinding:
     estimated_savings_pct: float
     example_before: str = ""
     example_after: str = ""
+    confidence: str = "medium"
+    evidence_ids: tuple[str, ...] = field(default_factory=tuple)
 
 
 # ---------------------------------------------------------------------------
@@ -36,13 +38,11 @@ class WasteFinding:
 
 _HELP_PATTERN = re.compile(r"(?:usage|help|options|flags|commands)\s*[:\-]", re.IGNORECASE)
 _JSON_ENVELOPE_KEYS = frozenset({"status", "ok", "success", "error", "meta", "metadata", "info", "version"})
-_OVERBROAD_TOOLS = frozenset({
-    "query_structure", "recall_memories", "artifact_read",
-    "mcp__memory__query_structure", "mcp__memory__recall_memories",
-    "mcp__workspace-artifacts__artifact_read",
-})
 _EPHEMERAL_PATTERNS = [
     re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"),  # ISO timestamps
+    re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?\b"),  # US dates
+    re.compile(r"\b\d{4}/\d{1,2}/\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?\b"),  # Slash dates
+    re.compile(r"\b(?:1[6-9]|2[0-9])\d{8}(?:\d{3})?\b"),  # Unix epoch seconds/ms
     re.compile(r"\d+\s*(?:ms|s|min|hr|days?)\b"),  # Durations
     re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE),  # UUIDs
     re.compile(r"uptime[:\s]+\d+", re.IGNORECASE),  # Uptime counters
@@ -103,7 +103,18 @@ def _is_help_text(text: str) -> bool:
     lines = text.split("\n")
     flag_lines = sum(1 for line in lines if line.strip().startswith("--") or line.strip().startswith("-"))
     header_lines = sum(1 for line in lines if _HELP_PATTERN.search(line))
+    if header_lines == 0:
+        return False
     return flag_lines > 3 or header_lines > 2
+
+
+def _evidence_id(result: object, index: int) -> str:
+    """Return a stable per-result identifier for overlapping finding deduplication."""
+    call_id = str(getattr(result, "call_id", "") or "")
+    if call_id:
+        return call_id
+    tool_name = str(getattr(result, "tool_name", "unknown"))
+    return f"{tool_name}@{index}"
 
 
 def _has_json_envelope(text: str) -> bool:
@@ -253,9 +264,7 @@ def _json_format_overhead(text: str) -> float:
             all_keys.update(item.keys())
         shared_keys = all_keys
         for item in obj:
-            if set(item.keys()) != shared_keys:
-                shared_keys = set(item.keys()) & set(item.keys())
-                break
+            shared_keys = shared_keys & set(item.keys())
 
         if len(shared_keys) > 2 and len(obj) > 2:
             json_len = len(text)

@@ -20,6 +20,8 @@ class TestPollingDetection:
         polling = [f for f in findings if f.waste_type == "polling"]
         assert len(polling) >= 1
         assert polling[0].server == "gradle"
+        assert polling[0].confidence == "high"
+        assert "byte-identical" in polling[0].description
 
     def test_clean_output_not_flagged(self):
         """Non-repeating results should not be flagged."""
@@ -34,6 +36,28 @@ class TestPollingDetection:
         polling = [f for f in findings if f.waste_type == "polling"]
         # These are all different, should not be flagged as polling
         assert len(polling) == 0
+
+    def test_similar_status_updates_are_low_confidence(self):
+        """Similar but changing results should not claim recoverable tokens."""
+        base_words = "alpha beta gamma delta epsilon zeta eta theta iota kappa"
+        results = [
+            ToolResult(
+                tool_name="mcp__gradle__gradle_job_status",
+                result_text=f"{base_words} step-{i}",
+                call_id=str(i),
+                turn_number=i,
+            )
+            for i in range(4)
+        ]
+        session = SessionData(source="test", session_id="test", tool_results=results)
+
+        findings = detect_waste(session)
+        polling = [f for f in findings if f.waste_type == "polling"]
+
+        assert len(polling) == 1
+        assert polling[0].severity == "info"
+        assert polling[0].confidence == "low"
+        assert polling[0].tokens_wasted == 0
 
 
 class TestOversizedDetection:
@@ -99,6 +123,13 @@ class TestHelperFunctions:
     def test_is_help_text_with_flags(self):
         text = "Usage:\n" + "\n".join(f"  --flag{i}  Description" for i in range(10))
         assert _is_help_text(text)
+
+    def test_flag_heavy_error_without_help_header_is_not_help_text(self):
+        text = "\n".join(
+            ["Command failed after parsing these arguments:"]
+            + [f"  --flag{i}=bad-value generated validation error {i}" for i in range(20)]
+        )
+        assert not _is_help_text(text)
 
     def test_is_help_text_normal_code(self):
         assert not _is_help_text("def hello():\n    pass\n")
@@ -252,6 +283,24 @@ class TestCacheBreakerDetection:
         assert cache_breakers[0].server == "gradle"
         # Verify example_before populated
         assert cache_breakers[0].example_before != ""
+
+    def test_detects_unix_and_slash_date_changes(self) -> None:
+        """Unix timestamps and slash dates are normalized as ephemeral values."""
+        results = [
+            ToolResult(
+                tool_name="mcp__gradle__gradle_job_status",
+                result_text=f"Status: running\nStarted: 2026/06/21 10:0{i}:00\nEpoch: {1782036000 + i}",
+                call_id=str(i),
+                turn_number=i,
+            )
+            for i in range(4)
+        ]
+        session = SessionData(source="test", session_id="test", tool_results=results)
+
+        findings = detect_waste(session)
+        cache_breakers = [f for f in findings if f.waste_type == "cache_breaker"]
+
+        assert len(cache_breakers) >= 1
 
     def test_stable_content_not_flagged(self) -> None:
         """Identical content across calls → polling, not cache breaker."""

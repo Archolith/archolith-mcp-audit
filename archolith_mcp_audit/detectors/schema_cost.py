@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from archolith_mcp_audit.attributor import attribute_tool
 from archolith_mcp_audit.detectors._helpers import WasteFinding
+from archolith_mcp_audit.detectors.config import savings_pct
 from archolith_mcp_audit.extractors.base import ToolResult
 
 AVG_SCHEMA_TOKENS = 300
@@ -44,7 +45,7 @@ def detect_schema_cost(
                 server=server,
                 waste_type="schema",
                 severity="medium" if per_turn_cost > 2000 else "low",
-                tokens_wasted=int(session_cost * 0.6),
+                tokens_wasted=int(session_cost * savings_pct("schema_lazy_load") / 100),
                 bytes_wasted=0,
                 call_count=tool_count,
                 total_calls=tool_count,
@@ -53,7 +54,7 @@ def detect_schema_cost(
                             f"= {session_cost:,} tokens total",
                 suggestion="Lazy-load schemas after first call. "
                            "Abbreviate to name+1-line-description thereafter.",
-                estimated_savings_pct=60.0,
+                estimated_savings_pct=savings_pct("schema_lazy_load"),
                 example_before=f"[{server}: {tool_count} full tool schemas, "
                                f"{per_turn_cost} tokens/turn]",
                 example_after=f"[{server}: {tool_count} abbreviated schemas, "

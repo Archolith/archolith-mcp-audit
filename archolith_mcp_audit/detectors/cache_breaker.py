@@ -5,9 +5,11 @@ from __future__ import annotations
 from archolith_mcp_audit.attributor import attribute_tool
 from archolith_mcp_audit.detectors._helpers import (
     WasteFinding,
+    _evidence_id,
     _normalize_ephemeral,
     _truncate,
 )
+from archolith_mcp_audit.detectors.config import savings_pct
 from archolith_mcp_audit.extractors.base import ToolResult
 from archolith_mcp_audit.tokenizer import count_tokens
 
@@ -33,6 +35,7 @@ def detect_cache_breakers(
 
         cache_breaks = 0
         cache_break_tokens = 0
+        evidence_ids: list[str] = []
         example = ""
 
         for i in range(1, len(results)):
@@ -41,6 +44,7 @@ def detect_cache_breakers(
 
             if prev_norm == curr_norm and results[i - 1].result_text != results[i].result_text:
                 cache_breaks += 1
+                evidence_ids.append(_evidence_id(results[i], i))
                 tc = count_tokens(results[i].result_text)
                 cache_break_tokens += tc.tokens_cl100k
                 if not example:
@@ -48,12 +52,13 @@ def detect_cache_breakers(
 
         if cache_breaks > 0:
             total_calls = len(results)
+            cache_savings_pct = savings_pct("cache_breaker")
             findings.append(WasteFinding(
                 tool_name=tool_name,
                 server=server,
                 waste_type="cache_breaker",
                 severity="medium" if cache_breaks > 3 else "low",
-                tokens_wasted=int(cache_break_tokens * 0.4),
+                tokens_wasted=int(cache_break_tokens * cache_savings_pct / 100),
                 bytes_wasted=0,
                 call_count=cache_breaks,
                 total_calls=total_calls,
@@ -61,9 +66,10 @@ def detect_cache_breakers(
                             f"preventing prompt caching",
                 suggestion="Normalize ephemeral values (timestamps, UUIDs, "
                            "durations) to stable placeholders for cache hits.",
-                estimated_savings_pct=40.0,
+                estimated_savings_pct=cache_savings_pct,
                 example_before=example,
                 example_after="[same content with [TIMESTAMP]/[UUID] placeholders]",
+                evidence_ids=tuple(evidence_ids),
             ))
 
     return findings
