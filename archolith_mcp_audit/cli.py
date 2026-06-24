@@ -12,7 +12,7 @@ __all__ = [
     "main",
 ]
 
-from archolith_mcp_audit.attributor import load_mapping
+from archolith_mcp_audit.attributor import _load_mapping
 from archolith_mcp_audit.report import (
     AuditReport,
     build_report,
