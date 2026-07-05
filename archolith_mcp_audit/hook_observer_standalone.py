@@ -74,21 +74,27 @@ except Exception:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    # Session ID: from CLI arg, env var, or "current" fallback.
-    # Claude Code substitutes $CLAUDE_SESSION_ID in the hook command string.
-    session_id = "current"
-    if len(sys.argv) > 1 and sys.argv[1].strip():
-        session_id = _safe_session_id(sys.argv[1].strip())
-    elif os.environ.get("MCP_AUDIT_SESSION_ID"):
-        session_id = _safe_session_id(os.environ["MCP_AUDIT_SESSION_ID"])
-
-    # Read stdin — agent sends the full PostToolUse payload as JSON.
+    # Read stdin first — the agent sends the full PostToolUse payload as JSON.
+    # The payload carries the session_id, which is used as a fallback below.
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}
     except Exception:
         print(json.dumps({"continue": True}))
         return
+
+    # Session ID precedence: CLI arg > MCP_AUDIT_SESSION_ID env > payload
+    # session_id > "current". Reading session_id from the payload is what keeps
+    # per-session attribution working: Claude Code does NOT substitute it into
+    # the hook command string, but it IS present in the PostToolUse JSON. Without
+    # this fallback every session collapses into a single "current.jsonl".
+    session_id = "current"
+    if len(sys.argv) > 1 and sys.argv[1].strip():
+        session_id = _safe_session_id(sys.argv[1].strip())
+    elif os.environ.get("MCP_AUDIT_SESSION_ID"):
+        session_id = _safe_session_id(os.environ["MCP_AUDIT_SESSION_ID"])
+    elif payload.get("session_id"):
+        session_id = _safe_session_id(str(payload["session_id"]))
 
     # Extract tool name — handle multiple payload shapes across agents.
     tool_name = (
@@ -109,16 +115,20 @@ def main() -> None:
     chars = len(result_text)
     tokens = _count_tokens(result_text)
 
-    # Append one JSONL observation.
-    # filtered_tokens == raw_tokens means passthrough (no archolith-filter active).
-    # When archolith-filter is active, RtkTelemetrySource overwrites filtered counts.
+    # Append one JSONL observation. This observer does NOT run archolith-filter,
+    # so it measures no real savings: filter_active=False and filtered==raw
+    # (passthrough, 0% savings). Treating these rows as "filter ran, saved
+    # nothing" is wrong — filter_active distinguishes "no filter in this context"
+    # from a genuine 0% result. Real filtered counts come from the live
+    # FilterTelemetryStore path, not from this file.
     try:
         entry = json.dumps({
             "tool_name": tool_name,
             "raw_tokens": tokens,
             "raw_chars": chars,
-            "filtered_tokens": tokens,   # passthrough — 0% savings
+            "filtered_tokens": tokens,   # passthrough — no filter in hook context
             "filtered_chars": chars,
+            "filter_active": False,
             "tiktoken_used": _enc is not None,
             "timestamp": datetime.datetime.now(datetime.UTC).timestamp(),
             "session_id": session_id,

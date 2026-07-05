@@ -138,6 +138,27 @@ class TestRtkTelemetrySource:
         assert "falling back to 'raw_tokens': 42" in caplog.text
         assert "falling back to 'filtered_tokens': 11" in caplog.text
 
+    def test_pull_reads_entries_property(self) -> None:
+        """A store exposing `.entries` (the real FilterTelemetryStore shape) is
+        read correctly — regression for the bridge reading the wrong attribute."""
+        source = RtkTelemetrySource()
+        source._available = True
+        source._store = SimpleNamespace(entries=[
+            SimpleNamespace(
+                tool="mcp__vps__vps_status",
+                raw_chars=100,
+                filtered_chars=40,
+                timestamp=1.0,
+            ),
+        ])
+
+        entries = source.pull()
+
+        assert len(entries) == 1
+        assert entries[0].tool_name == "mcp__vps__vps_status"
+        assert entries[0].raw_chars == 100
+        assert entries[0].filtered_chars == 40
+
 
 class TestTelemetryBridge:
     def test_push_directly(self) -> None:

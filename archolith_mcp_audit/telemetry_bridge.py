@@ -86,8 +86,12 @@ class FilterTelemetrySource:
 
     def _try_connect(self) -> None:
         try:
-            from archolith_filter.telemetry import FilterTelemetryStore
-            self._store = FilterTelemetryStore()
+            # Use the module-level singleton accessor, NOT the FilterTelemetryStore
+            # constructor. The constructor returns a fresh, empty store; the
+            # proxy/filter pipeline records into the singleton, so reading a new
+            # instance would always report zero.
+            from archolith_filter.telemetry import get_filter_telemetry_store
+            self._store = get_filter_telemetry_store()
             self._available = True
             log.info("Connected to archolith-filter FilterTelemetryStore")
         except ImportError:
@@ -107,7 +111,12 @@ class FilterTelemetrySource:
         entries: list[TelemetryEntry] = []
 
         try:
-            records = getattr(self._store, "records", None)
+            # archolith-filter's FilterTelemetryStore exposes its records via the
+            # `entries` property. Prefer it; fall back to `records` / get_all()
+            # for other store shapes (kept for backward compatibility).
+            records = getattr(self._store, "entries", None)
+            if records is None:
+                records = getattr(self._store, "records", None)
             if records is None:
                 get_all = getattr(self._store, "get_all", None)
                 if get_all is not None:
@@ -389,16 +398,22 @@ def write_telemetry_entry(
     filtered_chars: int = 0,
     session_id: str = "",
     metadata: dict | None = None,
+    filter_active: bool = False,
 ) -> None:
     """Append a telemetry entry to a JSONL file.
 
     Utility for hook observers and external processes that want to
     write observations to a file that can be read by FileTelemetrySource.
+
+    ``filter_active`` records whether a real filter pass produced
+    ``filtered_chars``; when False, consumers should treat the row as raw-only
+    (no savings signal) rather than as a genuine 0% filter result.
     """
     entry = {
         "tool_name": tool_name,
         "raw_chars": raw_chars,
         "filtered_chars": filtered_chars,
+        "filter_active": filter_active,
         "timestamp": time.time(),
         "session_id": session_id,
     }

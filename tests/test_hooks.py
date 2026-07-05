@@ -32,6 +32,31 @@ def test_standalone_hook_sanitizes_session_id(tmp_path) -> None:
     assert not (tmp_path / ".archolith" / "escape.jsonl").exists()
 
 
+def test_standalone_hook_uses_payload_session_id(tmp_path) -> None:
+    """With no CLI arg/env, the session_id is taken from the payload so each
+    session lands in its own file instead of collapsing into 'current'."""
+    hook = Path("archolith_mcp_audit/hook_observer_standalone.py")
+    proc = subprocess.run(
+        [sys.executable, str(hook)],
+        input=json.dumps(
+            {"session_id": "sess-abc", "tool_name": "Read", "tool_result": "ok"}
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+        env=_hook_env(tmp_path),
+    )
+
+    assert proc.returncode == 0
+    session_file = tmp_path / ".archolith" / "sessions" / "sess-abc.jsonl"
+    assert session_file.exists()
+    assert not (tmp_path / ".archolith" / "sessions" / "current.jsonl").exists()
+    record = json.loads(session_file.read_text(encoding="utf-8").splitlines()[0])
+    assert record["session_id"] == "sess-abc"
+    assert record["filter_active"] is False
+
+
 def test_codex_hook_sanitizes_session_id(tmp_path) -> None:
     hook = Path("archolith_mcp_audit/hook_observer_codex.py")
     proc = subprocess.run(
