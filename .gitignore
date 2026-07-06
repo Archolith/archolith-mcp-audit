@@ -16,6 +16,10 @@ venv/
 .vscode/
 *.swp
 
+# Local agent/runtime configuration
+.claude/
+.mcp.json
+
 # Testing
 .pytest_cache/
 htmlcov/

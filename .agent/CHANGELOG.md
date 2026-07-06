@@ -1,5 +1,10 @@
 # Changelog — archolith-audit
 
+## 2026-07-05 — Ignore local agent runtime configuration
+
+- Added `.claude/` session/agent state and `.mcp.json` to `.gitignore` so local runtime configuration does not
+  enter the project history.
+
 ## 2026-06-21 — Audit Remediation Sessions A/B/C/D/E/G/H
 
 - Fixed the CF-1 CLI import blocker by importing `_load_mapping` from `attributor.py`; added CLI smoke tests and synced/rebuilt plugin bundles.
