@@ -1,4 +1,4 @@
-# archolith-mcp-audit — Agent Docs
+# archolith-skree / archolith-mcp-audit — Agent Docs
 
 Read everything in this directory before starting work.
 

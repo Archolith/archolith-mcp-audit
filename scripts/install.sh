@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-archolith-audit one-command installer
+Archolith Skree — one-command installer
 
 Usage:
   bash install.sh claude

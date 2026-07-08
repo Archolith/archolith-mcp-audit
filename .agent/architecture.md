@@ -1,8 +1,8 @@
-# archolith-mcp-audit — Architecture
+# Archolith Skree — Architecture
 
 ## Overview
 
-MCP token usage audit system. Scans LLM session logs (Claude JSONL, Codex JSONL, OpenCode SQLite), attributes tool results to their MCP server, measures token cost per server, detects waste patterns, and produces per-server report cards with concrete optimization suggestions.
+Archolith Skree (MCP token usage audit system). Scans LLM session logs (Claude JSONL, Codex JSONL, OpenCode SQLite), attributes tool results to their MCP server, measures token cost per server, detects waste patterns, and produces per-server report cards with concrete optimization suggestions.
 
 **Design principle**: This is a diagnostic tool, not a proxy. It measures and reports. It does NOT intercept, compress, or modify MCP traffic. The goal is to drive server-side fixes, not add a permanent middleware layer.
 
@@ -17,7 +17,7 @@ over stdio subprocess communication.
 1. `refresh_schema_catalog()` in `schema_estimator.py` is called from `cli.py`.
 2. It locates `.mcp.json` (CWD-first, then ~/.claude/ fallback).
 3. For each configured server (queried concurrently with `asyncio.gather`):
-   a. Check self-exclusion via `_is_self_server()` — skip archolith-audit.
+      a. Check self-exclusion via `_is_self_server()` — skip Archolith Skree.
    b. Skip entries without a `command` field (SSE/HTTP-only servers).
    c. Call `_query_server_via_fastmcp()` which wraps FastMCP `Client`:
       - FastMCP handles the full protocol internally: spawn subprocess,
@@ -195,5 +195,5 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 |---------|-------------|
 | archolith-filter | Shares extraction patterns. archolith-filter's FilterTelemetryStore feeds the live accumulator. Audit measures what filter compresses; filter compresses what audit flags. |
 | archolith-context | Audit is the L3 measurement layer; context is L4 session curation. Audit findings drive server-side fixes that reduce the token volume the context layer has to manage. |
-| archolith-memory | Independent. Memory handles cross-session knowledge; audit handles per-session token measurement. |
-| archolith.dev | Product site. Audit ships as a standalone product. |
+| menhir | Independent. Memory handles cross-session knowledge; Skree handles per-session token measurement. |
+| archolith.dev | Product site. Skree ships as a standalone product. |

@@ -97,7 +97,7 @@ def _run_audit(
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point. Returns exit code."""
     parser = argparse.ArgumentParser(
-        description="MCP Token Usage Audit — measure and report per-server token waste"
+        description="Archolith Skree — MCP token usage audit, measure and report per-server token waste"
     )
     parser.add_argument("--claude", nargs="*", help="Claude JSONL session files")
     parser.add_argument("--codex", nargs="*", help="Codex JSONL session files")

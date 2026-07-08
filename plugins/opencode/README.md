@@ -1,6 +1,6 @@
-# archolith-audit — OpenCode Plugin
+# Archolith Skree — OpenCode Plugin
 
-Live MCP token usage audit for OpenCode sessions. Tracks per-server token spend and waste patterns in real time.
+Live MCP token usage audit (Archolith Skree) for OpenCode sessions. Tracks per-server token spend and waste patterns in real time.
 
 The cleanest integration of the four agents — runs in-process as a TypeScript plugin,
 no subprocess spawn or stdin/stdout overhead. Uses the real OpenCode `sessionId` for

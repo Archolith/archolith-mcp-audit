@@ -1,4 +1,15 @@
-# Changelog — archolith-audit
+# Changelog — Archolith Skree
+
+## 2026-07-08 — Public product rename to Archolith Skree
+
+- Renamed public product name from `archolith-audit` to **Archolith Skree** across all user-facing surfaces.
+- Added `skree` CLI entry point in `pyproject.toml` alongside existing `archolith-audit` alias.
+- Updated CLI help text, FastMCP server display name, and doc titles to say Archolith Skree.
+- Added `mcp__skree` and `skree_` self-attribution mappings in `server_mapping.json`.
+- Added "Names" section to README documenting the compatibility contract.
+- Updated plugin READMEs and manifest display names to say Skree.
+- Updated `.agent/` docs to reference Archolith Skree where user-facing.
+- Preserved all backward compatibility: `archolith-audit` CLI, `archolith-audit` MCP key, `archolith_mcp_audit` imports, `archolith-audit-plugin-*` repos.
 
 ## 2026-07-08 — One-command plugin installer
 

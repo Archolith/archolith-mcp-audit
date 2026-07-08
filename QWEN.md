@@ -1,4 +1,4 @@
-# archolith-audit - Qwen Instructions
+# Archolith Skree - Qwen Instructions
 
 Before performing any tasks, research, or code modifications, you **MUST** read the contents of the [`.agent/`](.agent/) directory.
 

@@ -1,4 +1,4 @@
-# archolith-mcp-audit
+# Archolith Skree
 
 MCP token usage audit system. Scans LLM session logs (Claude JSONL, Codex JSONL, OpenCode SQLite), attributes tool results to their MCP server, measures token cost per server, detects waste patterns, and produces per-server report cards with concrete optimization suggestions.
 
@@ -11,8 +11,17 @@ attached to the evidence.
 
 ## Names
 
-This repository is `archolith-mcp-audit`. The Python package and CLI distribution are
-`archolith-audit`, and the import module is `archolith_mcp_audit`.
+Archolith Skree is the public product name. Compatibility aliases remain for all existing install paths:
+
+| Surface | Name |
+|---------|------|
+| Public product | **Archolith Skree** / `archolith-skree` |
+| Source repository | `archolith-mcp-audit` |
+| Python distribution | `archolith-audit` |
+| Python import | `archolith_mcp_audit` |
+| CLI | `skree` and `archolith-audit` |
+| MCP server key | `archolith-audit` (also accepts `skree`) |
+| Plugin repo prefix | `archolith-audit-plugin-*` |
 
 ## Quick Start
 

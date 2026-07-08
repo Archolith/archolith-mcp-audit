@@ -1,4 +1,4 @@
-# archolith-audit
+# Archolith Skree
 
 MCP token usage audit system. Measures per-server token cost, detects waste patterns, and produces report cards with concrete optimization suggestions.
 

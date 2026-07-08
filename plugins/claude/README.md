@@ -1,6 +1,6 @@
-# archolith-audit — Claude Code Plugin
+# Archolith Skree — Claude Code Plugin
 
-Live MCP token usage audit for Claude Code sessions. Tracks per-server token spend and waste patterns in real time.
+Live MCP token usage audit (Archolith Skree) for Claude Code sessions. Tracks per-server token spend and waste patterns in real time.
 
 ## Install
 

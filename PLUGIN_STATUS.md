@@ -1,4 +1,4 @@
-# archolith-audit — Plugin Status
+# Archolith Skree — Plugin Status
 
 Per-plugin maturity, known gaps, and install instructions for the four agent
 plugins. Single source of truth for users evaluating which plugins to use.

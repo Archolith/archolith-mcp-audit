@@ -1,6 +1,6 @@
-# archolith-audit — Codex Plugin
+# Archolith Skree — Codex Plugin
 
-Live MCP token usage audit for Codex sessions. Tracks per-server token spend and waste patterns in real time.
+Live MCP token usage audit (Archolith Skree) for Codex sessions. Tracks per-server token spend and waste patterns in real time.
 
 ## Install
 

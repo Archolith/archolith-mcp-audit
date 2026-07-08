@@ -35,6 +35,7 @@ dev = [
 
 [project.scripts]
 archolith-audit = "archolith_mcp_audit.cli:main"
+skree = "archolith_mcp_audit.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["archolith_mcp_audit"]

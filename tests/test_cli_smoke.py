@@ -21,3 +21,16 @@ def test_cli_help_runs() -> None:
 
     assert proc.returncode == 0
     assert "usage:" in proc.stdout.lower() or "usage:" in proc.stderr.lower()
+
+
+def test_skree_alias_help_runs() -> None:
+    proc = subprocess.run(
+        [sys.executable, "-m", "archolith_mcp_audit", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert proc.returncode == 0
+    assert "Archolith Skree" in proc.stdout

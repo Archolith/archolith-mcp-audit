@@ -1,6 +1,6 @@
-# archolith-audit — Gemini CLI Extension
+# Archolith Skree — Gemini CLI Extension
 
-Live MCP token usage audit for Gemini CLI sessions. Tracks per-server token spend and waste patterns in real time.
+Live MCP token usage audit (Archolith Skree) for Gemini CLI sessions. Tracks per-server token spend and waste patterns in real time.
 
 ## Install
 
