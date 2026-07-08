@@ -11,7 +11,8 @@ Usage:
     python install.py --uninstall  # remove from global config
     python install.py --uninstall --project /path/to/project
 
-No pip install needed — archolith_mcp_audit/ is bundled in this directory.
+No global pip install needed — archolith_mcp_audit/ is bundled in this directory
+and the MCP server bootstraps an isolated runtime under ~/.archolith/venvs/.
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ def install_mcp(mcp_path: Path, plugin_dir: Path) -> None:
 
     config["mcpServers"][PLUGIN_NAME] = {
         "command": "python",
-        "args": ["-m", "archolith_mcp_audit.mcp_server"],
+        "args": ["-m", "archolith_mcp_audit.bootstrap", "mcp", "--agent", "claude"],
         "env": {
             "MCP_AUDIT_ENABLED": "1",
             "PYTHONPATH": str(plugin_dir),
@@ -204,6 +205,7 @@ Examples:
     install_hook(settings_path, plugin_dir)
     print("")
     print("Installed. Restart Claude Code to activate.")
+    print("The first MCP start creates/updates ~/.archolith/venvs/claude-pyXY from requirements.txt.")
     print("")
     print("After restarting, start a session and do some work, then ask:")
     print('  "show me the MCP audit summary"')

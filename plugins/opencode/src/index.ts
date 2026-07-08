@@ -45,7 +45,8 @@ export default function archolith_audit_plugin(context: PluginContext) {
 
   return {
     "tool.execute.after": (event: ToolExecuteAfterEvent) => {
-      const chars = JSON.stringify(event.result ?? "").length;
+      const result = event.result === null || event.result === undefined ? "" : event.result;
+      const chars = JSON.stringify(result).length;
       writeObservation(sessionId, event.tool, chars);
     },
   };

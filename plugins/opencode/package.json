@@ -14,6 +14,7 @@
   "files": [
     "dist/",
     "archolith_mcp_audit/",
+    "requirements.txt",
     "README.md"
   ],
   "scripts": {

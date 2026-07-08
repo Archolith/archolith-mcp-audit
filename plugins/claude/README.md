@@ -11,11 +11,9 @@ Live MCP token usage audit for Claude Code sessions. Tracks per-server token spe
 ```
 
 Claude Code clones the plugin, registers the MCP server, and activates the hooks.
-Install the Python runtime dependencies once in the Python environment Claude Code uses:
-
-```bash
-python -m pip install -r requirements.txt
-```
+On first MCP startup, the plugin creates an isolated runtime under
+`~/.archolith/venvs/claude-pyXY` and installs `requirements.txt` there. It does
+not mutate your global Python environment.
 
 ### Manual install (no plugin system)
 
@@ -24,7 +22,6 @@ Clone the repo and run the installer:
 ```bash
 git clone https://github.com/Archolith/archolith-audit-plugin-claude
 cd archolith-audit-plugin-claude
-python -m pip install -r requirements.txt
 python install.py
 ```
 
@@ -52,6 +49,12 @@ If it shows "No tool results observed yet," the hook is not firing — check tha
 `MCP_AUDIT_ENABLED=1` is set in the MCP server env and that Python can find
 `archolith_mcp_audit` via the `PYTHONPATH` set in `plugin.json`.
 
+To verify the runtime without starting a full Claude session:
+
+```bash
+PYTHONPATH="$(pwd)" python -m archolith_mcp_audit.bootstrap check --agent claude
+```
+
 ### Uninstall
 
 ```
@@ -72,6 +75,6 @@ archolith_mcp_audit/          ← bundled core Python package
 
 ## Requirements
 
-- Python 3.11+ on PATH (for MCP server + hook observer)
-- `tiktoken` and `fastmcp` installed in that Python environment
+- Python 3.10+ on PATH with `venv` and `pip`
+- Network access on first MCP startup unless the managed venv is already populated
 - Claude Code

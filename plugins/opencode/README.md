@@ -14,7 +14,7 @@ Add to OpenCode config (`~/.config/opencode/opencode.json`):
 
 ```json
 {
-  "plugins": ["@archolith/archolith-audit-plugin-opencode"]
+  "plugin": ["@archolith/archolith-audit-plugin-opencode"]
 }
 ```
 
@@ -22,13 +22,13 @@ Then add the MCP server:
 
 ```json
 {
-  "mcpServers": {
+  "mcp": {
     "archolith-audit": {
-      "command": "python",
-      "args": ["-m", "archolith_mcp_audit.mcp_server"],
-      "env": {
+      "type": "local",
+      "enabled": true,
+      "command": ["python", "-m", "archolith_mcp_audit.bootstrap", "mcp", "--agent", "opencode"],
+      "environment": {
         "MCP_AUDIT_ENABLED": "1",
-        "MCP_AUDIT_SESSION_ID": "${OPENCODE_SESSION_ID}",
         "PYTHONPATH": "${OPENCODE_PLUGIN_DIR}"
       }
     }
@@ -36,12 +36,10 @@ Then add the MCP server:
 }
 ```
 
-OpenCode installs the plugin via Bun at next startup. Install the Python runtime
-dependencies once in the Python environment OpenCode uses:
-
-```bash
-python -m pip install -r requirements.txt
-```
+OpenCode installs the TypeScript plugin at next startup. On first MCP startup,
+the plugin creates an isolated runtime under `~/.archolith/venvs/opencode-pyXY`
+and installs `requirements.txt` there. It does not mutate your global Python
+environment.
 
 ### Local development
 
@@ -55,7 +53,18 @@ Add to OpenCode config:
 
 ```json
 {
-  "plugins": ["/absolute/path/to/archolith-audit-plugin-opencode"]
+  "plugin": ["/absolute/path/to/archolith-audit-plugin-opencode/dist/index.js"],
+  "mcp": {
+    "archolith-audit": {
+      "type": "local",
+      "enabled": true,
+      "command": ["python", "-m", "archolith_mcp_audit.bootstrap", "mcp", "--agent", "opencode"],
+      "environment": {
+        "MCP_AUDIT_ENABLED": "1",
+        "PYTHONPATH": "/absolute/path/to/archolith-audit-plugin-opencode"
+      }
+    }
+  }
 }
 ```
 
@@ -64,6 +73,13 @@ Add to OpenCode config:
 Start an OpenCode session. After a few tool calls, call `mcp_audit_summary` via the
 audit MCP tools. Should show per-server data. Check `~/.archolith/sessions/` for the
 JSONL file — it should be growing as tools are called.
+
+To verify the Python runtime without starting a full OpenCode session:
+
+```bash
+PYTHONPATH="/absolute/path/to/archolith-audit-plugin-opencode" \
+  python -m archolith_mcp_audit.bootstrap check --agent opencode
+```
 
 ## Structure
 
@@ -85,15 +101,14 @@ archolith_mcp_audit/          ← bundled core Python package
 ## Known Gaps
 
 1. **OPENCODE_PLUGIN_DIR env var**: Verify whether OpenCode provides a
-   `${OPENCODE_PLUGIN_DIR}` variable for `PYTHONPATH`. If not, set programmatically
-   in `index.ts`.
-2. **OPENCODE_SESSION_ID forwarding**: Verify whether OpenCode forwards session ID
-   env vars into MCP server subprocesses. If not, use hour-based fallback.
-3. **Bun package resolution**: Verify that Bun correctly installs npm packages that
+   `${OPENCODE_PLUGIN_DIR}` variable for `PYTHONPATH`. If not, use the absolute
+   package path shown above.
+2. **Bun package resolution**: Verify that Bun correctly installs npm packages that
    include non-JS files (the bundled Python package).
 
 ## Requirements
 
-- Python 3.11+ on PATH (for MCP server)
-- `tiktoken` and `fastmcp` installed in that Python environment
+- Python 3.10+ on PATH with `venv` and `pip`
+- Network access on first MCP startup unless the managed venv is already populated
+- Node.js 18+ recommended for OpenCode; the plugin bundle avoids newer syntax for compatibility
 - OpenCode

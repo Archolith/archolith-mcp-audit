@@ -1,5 +1,13 @@
 # Changelog — archolith-audit
 
+## 2026-07-08 — Seamless plugin runtime bootstrap
+
+- Added a stdlib-only `archolith_mcp_audit.bootstrap` entry point for bundled plugins; it creates/reuses isolated per-agent venvs under `~/.archolith/venvs/` and installs `requirements.txt` there before launching the MCP server.
+- Updated Claude, Codex, and Gemini plugin MCP manifests plus the Claude manual installer to launch through the bootstrap instead of assuming `fastmcp`/`tiktoken` are installed globally.
+- Corrected plugin READMEs so install instructions no longer ask users to mutate global Python environments; OpenCode docs now use the observed `plugin` and `mcp` config shape.
+- Lowered the OpenCode compiled JS target and removed nullish coalescing from the plugin source so older Node runtimes fail less often.
+- Regenerated synced plugin bundles and `dist/archolith-audit-plugin-*` release directories.
+
 ## 2026-07-07 — Apache-2.0 licensing
 
 - Relicensed `archolith-mcp-audit` from PolyForm Noncommercial to Apache-2.0.

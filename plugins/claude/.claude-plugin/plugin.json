@@ -12,7 +12,7 @@
   "mcpServers": {
     "archolith-audit": {
       "command": "python",
-      "args": ["-m", "archolith_mcp_audit.mcp_server"],
+      "args": ["-m", "archolith_mcp_audit.bootstrap", "mcp", "--agent", "claude"],
       "env": {
         "MCP_AUDIT_ENABLED": "1",
         "MCP_AUDIT_SESSION_ID": "${CLAUDE_SESSION_ID}",
