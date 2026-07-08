@@ -1,7 +1,13 @@
 {
-  "name": "@archolith/opencode-plugin",
+  "name": "@archolith/archolith-audit-plugin-opencode",
   "version": "0.1.0",
   "description": "Live MCP token usage audit for OpenCode sessions",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Archolith/archolith-audit-plugin-opencode.git"
+  },
+  "homepage": "https://archolith.dev",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "keywords": ["opencode-plugin", "archolith", "mcp", "token-audit"],

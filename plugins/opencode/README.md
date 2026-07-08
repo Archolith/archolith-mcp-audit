@@ -14,7 +14,7 @@ Add to OpenCode config (`~/.config/opencode/opencode.json`):
 
 ```json
 {
-  "plugins": ["@archolith/opencode-plugin"]
+  "plugins": ["@archolith/archolith-audit-plugin-opencode"]
 }
 ```
 
@@ -36,13 +36,17 @@ Then add the MCP server:
 }
 ```
 
-OpenCode installs via Bun at next startup. No `pip install` needed — the Python
-package is bundled inside the npm package.
+OpenCode installs the plugin via Bun at next startup. Install the Python runtime
+dependencies once in the Python environment OpenCode uses:
+
+```bash
+python -m pip install -r requirements.txt
+```
 
 ### Local development
 
 ```bash
-cd plugin-opencode
+cd archolith-audit-plugin-opencode
 npm install
 npm run build
 ```
@@ -51,7 +55,7 @@ Add to OpenCode config:
 
 ```json
 {
-  "plugins": ["/absolute/path/to/plugin-opencode"]
+  "plugins": ["/absolute/path/to/archolith-audit-plugin-opencode"]
 }
 ```
 
@@ -67,7 +71,8 @@ JSONL file — it should be growing as tools are called.
 package.json                  ← npm package manifest (opencode-plugin keyword)
 tsconfig.json                 ← TypeScript compiler config
 src/index.ts                  ← plugin entry point (in-process, no subprocess)
-archolith_mcp_audit/          ← bundled core Python package (no pip install needed)
+requirements.txt              ← Python runtime dependencies
+archolith_mcp_audit/          ← bundled core Python package
 ```
 
 ## Why This Is Cleaner Than the Other Agents
@@ -90,4 +95,5 @@ archolith_mcp_audit/          ← bundled core Python package (no pip install ne
 ## Requirements
 
 - Python 3.11+ on PATH (for MCP server)
+- `tiktoken` and `fastmcp` installed in that Python environment
 - OpenCode

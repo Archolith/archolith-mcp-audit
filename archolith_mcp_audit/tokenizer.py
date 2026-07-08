@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import tiktoken
-from archolith_maintenance.token_accounting import count_text_tokens
 
 __all__ = [
     "TokenCount",
@@ -54,9 +53,10 @@ def get_encodings() -> dict[str, tiktoken.Encoding]:
 @lru_cache(maxsize=4096)
 def _count_tokens_default(text: str) -> tuple[int, int]:
     """Count default encodings with a bounded cache for repeated detector passes."""
+    encodings = get_encodings()
     return (
-        count_text_tokens(text, encoding="cl100k_base"),
-        count_text_tokens(text, encoding="o200k_base"),
+        len(encodings["cl100k_base"].encode(text)),
+        len(encodings["o200k_base"].encode(text)),
     )
 
 
@@ -110,4 +110,6 @@ def estimate_tokens(text: str, encoding: str = "cl100k_base") -> int:
 
     Convenience function for quick estimates.
     """
-    return count_text_tokens(text, encoding=encoding)
+    if encoding in {"cl100k_base", "o200k_base"}:
+        return len(get_encodings()[encoding].encode(text))
+    return len(tiktoken.get_encoding(encoding).encode(text))

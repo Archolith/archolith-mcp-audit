@@ -11,7 +11,11 @@ Live MCP token usage audit for Claude Code sessions. Tracks per-server token spe
 ```
 
 Claude Code clones the plugin, registers the MCP server, and activates the hooks.
-No `pip install` needed — the Python package is bundled inside the plugin directory.
+Install the Python runtime dependencies once in the Python environment Claude Code uses:
+
+```bash
+python -m pip install -r requirements.txt
+```
 
 ### Manual install (no plugin system)
 
@@ -20,6 +24,7 @@ Clone the repo and run the installer:
 ```bash
 git clone https://github.com/Archolith/archolith-audit-plugin-claude
 cd archolith-audit-plugin-claude
+python -m pip install -r requirements.txt
 python install.py
 ```
 
@@ -61,10 +66,12 @@ hooks/hooks.json              ← async PostToolUse hook (.* matcher)
 hook_observer.py              ← standalone hook wrapper (writes JSONL observations)
 skills/audit/SKILL.md         ← /archolith-audit:audit slash command
 install.py                    ← manual installer (no plugin system required)
-archolith_mcp_audit/          ← bundled core Python package (no pip install needed)
+requirements.txt              ← Python runtime dependencies
+archolith_mcp_audit/          ← bundled core Python package
 ```
 
 ## Requirements
 
 - Python 3.11+ on PATH (for MCP server + hook observer)
+- `tiktoken` and `fastmcp` installed in that Python environment
 - Claude Code

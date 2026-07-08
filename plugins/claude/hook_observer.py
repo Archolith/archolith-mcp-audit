@@ -9,7 +9,7 @@ and appends an observation line to ~/.archolith/sessions/<sessionId>.jsonl.
 
 import json
 import sys
-from datetime import UTC, datetime
+import time
 from pathlib import Path
 
 
@@ -31,9 +31,14 @@ def main() -> None:
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
     entry = json.dumps({
-        "tool": tool_name,
-        "chars": chars,
-        "ts": datetime.now(UTC).isoformat(),
+        "tool_name": tool_name,
+        "raw_tokens": 0,
+        "raw_chars": chars,
+        "filtered_tokens": 0,
+        "filtered_chars": chars,
+        "filter_active": False,
+        "timestamp": time.time(),
+        "session_id": session_id,
     })
 
     try:

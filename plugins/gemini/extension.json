@@ -2,6 +2,8 @@
   "name": "archolith-audit",
   "version": "0.1.0",
   "description": "Live MCP token usage audit",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/Archolith/archolith-audit-plugin-gemini",
   "hooks": {
     "AfterTool": "hooks/after-tool.js"
   },

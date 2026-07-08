@@ -20,6 +20,10 @@ pip install -e ".[dev]"            # package importable for MCP server
 rm -rf ~/.archolith/sessions/*.jsonl   # start clean so counts are unambiguous
 ```
 
+Standalone plugin repos include a bundled `archolith_mcp_audit/` package plus
+`requirements.txt`. For split-repo runtime tests, install those requirements into
+the Python environment used by the agent before launching the MCP server.
+
 A successful run leaves per-session JSONL files here:
 
 ```bash
@@ -124,7 +128,7 @@ Require current Gemini CLI docs or a live install.
 - [ ] `cd plugins/opencode && npm run build` exits 0; `dist/index.js` regenerated
 - [ ] Local-path install via `opencode.json` `plugins` works
 - [ ] Bun preserves bundled non-JS assets during `bun install` (if Bun path used)
-- [ ] (Optional) publish `@archolith/opencode-plugin` to npm
+- [ ] (Optional) publish `@archolith/archolith-audit-plugin-opencode` to npm
 
 ---
 

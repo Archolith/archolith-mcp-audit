@@ -5,7 +5,7 @@ MCP token usage audit system. Scans LLM session logs (Claude JSONL, Codex JSONL,
 **Design principle**: This is a diagnostic tool, not a proxy. It measures and reports. It does NOT intercept, compress, or modify MCP traffic.
 
 **Limitations:** Token counts use OpenAI-compatible tokenizers (`cl100k_base` and `o200k_base`)
-through `archolith-maintenance`/`tiktoken`. Treat cross-provider counts and heuristic savings
+through `tiktoken`. Treat cross-provider counts and heuristic savings
 percentages as directional unless a refreshed schema catalog and provider-specific validation are
 attached to the evidence.
 
@@ -98,6 +98,6 @@ PER-SERVER REPORT CARDS
 
 ## License
 
-Source-available under the PolyForm Noncommercial License 1.0.0.
+Licensed under the Apache License 2.0.
 
 archolith&trade; is a trademark of Charles Harvey.

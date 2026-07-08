@@ -1,5 +1,18 @@
 # Changelog — archolith-audit
 
+## 2026-07-07 — Apache-2.0 licensing
+
+- Relicensed `archolith-mcp-audit` from PolyForm Noncommercial to Apache-2.0.
+- Updated package metadata, root license text, README license copy, and third-party license notes.
+- Standardized tracked plugin manifests/package files on `license = Apache-2.0`.
+- Updated release packaging so each generated plugin bundle includes the root Apache-2.0 `LICENSE` and third-party license notes.
+- Aligned split-plugin distribution names on `archolith-audit-plugin-*` for all four plugins and updated plugin README install targets/repository metadata.
+- Created/pushed public standalone plugin repos under `Archolith/archolith-audit-plugin-{claude,codex,gemini,opencode}` from generated `dist/` bundles.
+- Removed the runtime dependency on the local `archolith-maintenance` package from the tokenizer so Apache plugin bundles depend only on public runtime packages.
+- Added `requirements.txt` to each plugin bundle and documented the clean-install dependency step for standalone repos.
+- Fixed tracked Claude/Codex hook shims for canonical telemetry JSONL output and Python 3.10-compatible UTC handling.
+- Added a WSL plugin verification runbook and verified all four pushed public plugin repos with a clean Ubuntu clone, throwaway venv dependency install, package import, and hook smoke.
+
 ## 2026-07-05 — Ignore local agent runtime configuration
 
 - Added `.claude/` session/agent state and `.mcp.json` to `.gitignore` so local runtime configuration does not

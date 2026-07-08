@@ -7,23 +7,29 @@ Live MCP token usage audit for Gemini CLI sessions. Tracks per-server token spen
 ### Via Gemini CLI registry
 
 ```
-gemini /extensions install @archolith/gemini-extension
+gemini /extensions install @archolith/archolith-audit-plugin-gemini
 ```
 
-No `pip install` needed — the Python package is bundled inside the extension.
+Install the Python runtime dependencies once in the Python environment Gemini CLI uses:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
 Python must be available on `PATH` for the MCP server to launch.
 
 ### Via GitHub
 
 ```
-gemini /extensions install github:archolith/archolith-audit-gemini
+gemini /extensions install github:Archolith/archolith-audit-plugin-gemini
 ```
 
 ### Manual install
 
-1. Copy the extension files to `~/.gemini/extensions/archolith-audit/`.
+1. Clone `https://github.com/Archolith/archolith-audit-plugin-gemini` to `~/.gemini/extensions/archolith-audit/`.
 2. Ensure Python is available on PATH.
-3. Restart Gemini CLI.
+3. Run `python -m pip install -r requirements.txt`.
+4. Restart Gemini CLI.
 
 ### Verify
 
@@ -36,7 +42,8 @@ Start a Gemini CLI session. After a few tool calls, invoke `mcp_audit_summary`. 
 package.json                  ← npm package manifest (geminicli-plugin keyword)
 extension.json                ← Gemini CLI extension manifest + MCP server
 hooks/after-tool.js           ← AfterTool hook handler (writes JSONL observations)
-archolith_mcp_audit/          ← bundled core Python package (no pip install needed)
+requirements.txt              ← Python runtime dependencies
+archolith_mcp_audit/          ← bundled core Python package
 ```
 
 ## Known Gaps
@@ -52,5 +59,6 @@ archolith_mcp_audit/          ← bundled core Python package (no pip install ne
 ## Requirements
 
 - Python 3.11+ on PATH (for MCP server)
+- `tiktoken` and `fastmcp` installed in that Python environment
 - Node.js (for hook handler)
 - Gemini CLI

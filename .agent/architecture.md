@@ -46,7 +46,7 @@ over stdio subprocess communication.
 | Layer | Technology |
 |-------|-----------|
 | Language | Python 3.11+ |
-| Tokenizer | archolith-maintenance primitive with tiktoken (cl100k_base + o200k_base) when available |
+| Tokenizer | tiktoken (cl100k_base + o200k_base) |
 | MCP Server | FastMCP 0.4+ |
 | CLI | argparse |
 | Testing | pytest 8+ |
@@ -70,7 +70,7 @@ Session logs (JSONL / SQLite)
            │
            ▼
 ┌──────────────────────┐
-│  Token Counter        │  shared primitive + bounded repeated-text token cache
+│  Token Counter        │  tiktoken + bounded repeated-text token cache
 └──────────┬───────────┘
            │
            ▼
@@ -135,7 +135,7 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 |--------|---------|
 | `cli.py` | Argparse CLI entry point |
 | `attributor.py` | Tool name → MCP server mapping (configurable) |
-| `tokenizer.py` | Audit `TokenCount` report shape backed by `archolith-maintenance` primitive text counts; caches repeated default-encoding counts |
+| `tokenizer.py` | Audit `TokenCount` report shape backed by tiktoken; caches repeated default-encoding counts |
 | `_paths.py` | Session-id sanitization plus atomic JSONL/text file-write helpers for package code |
 | `waste_detector.py` | Orchestrator for 6 waste pattern detectors |
 | `detectors/` | Subpackage: polling, oversized, redundant_fields, schema_cost, format_waste, cache_breaker |
@@ -184,8 +184,7 @@ The TelemetryBridge provides a uniform interface for feeding observations from m
 
 | Dependency | Purpose | Required |
 |------------|---------|----------|
-| archolith-maintenance | Shared token-counting primitive | Yes (pip/editable peer) |
-| tiktoken | Accurate OpenAI-tokenizer proxy used by the shared primitive | Yes (pip) |
+| tiktoken | Accurate OpenAI-compatible tokenizer proxy | Yes (pip) |
 | FastMCP | MCP server for in-session audit | Yes (pip) |
 | archolith-filter telemetry | FilterTelemetryStore for live accumulator | Optional (in-session mode only) |
 | Claude/Codex/OpenCode session logs | Session data to audit | Required for CLI mode |

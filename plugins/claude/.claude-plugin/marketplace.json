@@ -14,7 +14,8 @@
         "name": "archolith"
       },
       "homepage": "https://archolith.dev",
-      "license": "MIT",
+      "repository": "https://github.com/Archolith/archolith-audit-plugin-claude",
+      "license": "Apache-2.0",
       "keywords": ["mcp", "audit", "tokens", "telemetry"]
     }
   ]

@@ -13,7 +13,7 @@ per-hour key (codex-<hour>) for reasonable session grouping.
 import json
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -28,7 +28,7 @@ def main() -> None:
     tool_name = payload.get("tool_name", payload.get("tool", "unknown"))
     result = payload.get("tool_result", payload.get("output", "") or "")
     chars = len(str(result))
-    session_id = payload.get("session_id", f"codex-{datetime.now(UTC).strftime('%Y%m%d-%H')}")
+    session_id = payload.get("session_id", f"codex-{datetime.now(timezone.utc).strftime('%Y%m%d-%H')}")  # noqa: UP017
 
     sessions_dir = Path.home() / ".archolith" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)

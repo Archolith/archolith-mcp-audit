@@ -51,6 +51,7 @@ ADAPTER_FILES: dict[str, list[str]] = {
         ".claude-plugin/marketplace.json",
         ".gitattributes",
         ".gitignore",
+        "requirements.txt",
         "hooks/hooks.json",
         "hook_observer.py",
         "install.py",
@@ -59,6 +60,7 @@ ADAPTER_FILES: dict[str, list[str]] = {
     ],
     "codex": [
         "plugin.json",
+        "requirements.txt",
         "hooks/hooks.json",
         "hook_observer_codex.py",
         "README.md",
@@ -66,6 +68,7 @@ ADAPTER_FILES: dict[str, list[str]] = {
     "gemini": [
         "package.json",
         "extension.json",
+        "requirements.txt",
         "hooks/after-tool.js",
         ".gitignore",
         "README.md",
@@ -73,6 +76,7 @@ ADAPTER_FILES: dict[str, list[str]] = {
     "opencode": [
         "package.json",
         "tsconfig.json",
+        "requirements.txt",
         "src/index.ts",
         ".gitignore",
         "README.md",
@@ -83,8 +87,8 @@ ADAPTER_FILES: dict[str, list[str]] = {
 DIST_NAMES = {
     "claude": "archolith-audit-plugin-claude",
     "codex": "archolith-audit-plugin-codex",
-    "gemini": "archolith-audit-gemini",
-    "opencode": "archolith-audit-opencode",
+    "gemini": "archolith-audit-plugin-gemini",
+    "opencode": "archolith-audit-plugin-opencode",
 }
 
 
@@ -235,7 +239,11 @@ def cmd_build(args: argparse.Namespace) -> None:
         # 2. Copy core package
         core_count = _copy_core(dist_path / "archolith_mcp_audit")
 
-        # 3. For OpenCode: copy dist/ (compiled JS) if it exists
+        # 3. Copy license notes into every publishable plugin bundle.
+        shutil.copy2(PKG_ROOT / "LICENSE", dist_path / "LICENSE")
+        shutil.copy2(PKG_ROOT / "THIRD-PARTY-LICENSES.md", dist_path / "THIRD-PARTY-LICENSES.md")
+
+        # 4. For OpenCode: copy dist/ (compiled JS) if it exists
         if name == "opencode":
             ts_dist = plugin_src / "dist"
             if ts_dist.exists():
@@ -248,8 +256,9 @@ def cmd_build(args: argparse.Namespace) -> None:
 
     print(f"\nDistribution directories assembled in: {DIST_DIR}/")
     print("Next steps:")
-    print("  - Git plugins (claude, codex): copy to distribution repo, commit, tag, push")
-    print("  - npm plugins (gemini, opencode): cd dist/<name> && npm publish")
+    print("  - Copy each dist/archolith-audit-plugin-* directory to its matching standalone repo")
+    print("  - Commit, tag, and push each standalone plugin repo")
+    print("  - For npm-capable plugins (gemini, opencode): publish from the matching dist directory")
 
 
 # ---------------------------------------------------------------------------

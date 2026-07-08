@@ -4,6 +4,8 @@
   "description": "Live MCP token usage audit for Codex sessions.",
   "author": "archolith",
   "homepage": "https://archolith.dev",
+  "repository": "https://github.com/Archolith/archolith-audit-plugin-codex",
+  "license": "Apache-2.0",
   "mcpServers": {
     "archolith-audit": {
       "command": "python",

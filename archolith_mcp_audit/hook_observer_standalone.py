@@ -130,7 +130,7 @@ def main() -> None:
             "filtered_chars": chars,
             "filter_active": False,
             "tiktoken_used": _enc is not None,
-            "timestamp": datetime.datetime.now(datetime.UTC).timestamp(),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).timestamp(),  # noqa: UP017
             "session_id": session_id,
         })
         _append_jsonl(SESSIONS_DIR / f"{session_id}.jsonl", entry)

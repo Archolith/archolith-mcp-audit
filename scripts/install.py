@@ -409,12 +409,12 @@ def install_codex() -> None:
 
 def install_opencode() -> None:
     print("\n=== OpenCode ===")
-    print("  OpenCode uses an npm/TypeScript plugin (@archolith/opencode-plugin).")
-    print("  Status: NOT YET IMPLEMENTED.")
-    print("  See: archolith-audit-opencode-plugin-plan.md")
+    print("  OpenCode uses an npm/TypeScript plugin (@archolith/archolith-audit-plugin-opencode).")
+    print("  Status: implemented; runtime verification still required before public publish.")
+    print("  See: .agent/workflows/plugin_runtime_verification.md")
     print("")
     print("  When ready:")
-    print("    bun add @archolith/opencode-plugin  # or npm install")
+    print("    bun add @archolith/archolith-audit-plugin-opencode  # or npm install")
     print("    # Plugin auto-registers via package.json 'opencode' key")
 
 
@@ -425,8 +425,8 @@ def install_opencode() -> None:
 def install_gemini() -> None:
     print("\n=== Gemini CLI ===")
     print("  Gemini CLI extension requires extension.json + after-tool.js.")
-    print("  Status: NOT YET IMPLEMENTED.")
-    print("  See: archolith-audit-gemini-plugin-plan.md (4 known gaps require verification)")
+    print("  Status: implemented; runtime verification still required before public publish.")
+    print("  See: .agent/workflows/plugin_runtime_verification.md")
     print("")
     print("  Known gaps:")
     print("    1. Exact AfterTool payload shape not verified")
