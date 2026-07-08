@@ -76,7 +76,7 @@ def _is_self_server(name: str, command: str, args: list[str]) -> bool:
 
     Returns True if either check fires.
     """
-    if name == "archolith-audit":
+    if name in ("archolith-audit", "skree"):
         log.debug("Skipping self by server name: %s", name)
         return True
 
