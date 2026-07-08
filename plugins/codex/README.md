@@ -4,11 +4,15 @@ Live MCP token usage audit for Codex sessions. Tracks per-server token spend and
 
 ## Install
 
-### Via Codex CLI
+### One-command install
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- codex
 ```
-/plugins install github:Archolith/archolith-audit-plugin-codex
-```
+
+The installer clones `https://github.com/Archolith/archolith-audit-plugin-codex` to
+`~/.archolith/plugins/archolith-audit-plugin-codex`, verifies the managed Python runtime, and runs
+`codex mcp add` with the correct `PYTHONPATH`.
 
 On first MCP startup, the plugin creates an isolated runtime under
 `~/.archolith/venvs/codex-pyXY` and installs `requirements.txt` there. It does
@@ -16,9 +20,16 @@ not mutate your global Python environment.
 
 ### Manual install
 
-1. Clone `https://github.com/Archolith/archolith-audit-plugin-codex` to `~/.codex/plugins/archolith-audit/`.
-2. Ensure Python is available on `PATH`.
-3. Restart Codex.
+```bash
+git clone https://github.com/Archolith/archolith-audit-plugin-codex \
+  ~/.archolith/plugins/archolith-audit-plugin-codex
+codex mcp add archolith-audit \
+  --env MCP_AUDIT_ENABLED=1 \
+  --env PYTHONPATH="$HOME/.archolith/plugins/archolith-audit-plugin-codex" \
+  -- python -m archolith_mcp_audit.bootstrap mcp --agent codex
+```
+
+Restart Codex after installing.
 
 ### Verify
 
@@ -29,7 +40,7 @@ per-server data. If empty, check that the JSONL file exists at
 To verify the runtime without starting a full Codex session:
 
 ```bash
-PYTHONPATH="$HOME/.codex/plugins/archolith-audit" \
+PYTHONPATH="$HOME/.archolith/plugins/archolith-audit-plugin-codex" \
   python -m archolith_mcp_audit.bootstrap check --agent codex
 ```
 

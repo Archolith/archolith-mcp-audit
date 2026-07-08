@@ -4,10 +4,17 @@ Live MCP token usage audit for Claude Code sessions. Tracks per-server token spe
 
 ## Install
 
-### From GitHub (recommended)
+### One-command install
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- claude
 ```
-/plugin install github:Archolith/archolith-audit-plugin-claude
+
+### Claude marketplace install
+
+```bash
+claude plugin marketplace add Archolith/archolith-audit-plugin-claude --scope user
+claude plugin install archolith-audit@archolith --scope user
 ```
 
 Claude Code clones the plugin, registers the MCP server, and activates the hooks.
@@ -56,6 +63,12 @@ PYTHONPATH="$(pwd)" python -m archolith_mcp_audit.bootstrap check --agent claude
 ```
 
 ### Uninstall
+
+```bash
+claude plugin uninstall archolith-audit --scope user
+```
+
+Older Claude plugin builds may also support:
 
 ```
 /plugin uninstall archolith-audit

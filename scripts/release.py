@@ -37,6 +37,7 @@ PKG_ROOT = Path(__file__).parent.parent.resolve()
 CORE_PKG = PKG_ROOT / "archolith_mcp_audit"
 PLUGINS_DIR = PKG_ROOT / "plugins"
 DIST_DIR = PKG_ROOT / "dist"
+INSTALLER = PKG_ROOT / "scripts" / "install.sh"
 
 PLUGIN_NAMES = ["claude", "codex", "gemini", "opencode"]
 
@@ -243,7 +244,11 @@ def cmd_build(args: argparse.Namespace) -> None:
         shutil.copy2(PKG_ROOT / "LICENSE", dist_path / "LICENSE")
         shutil.copy2(PKG_ROOT / "THIRD-PARTY-LICENSES.md", dist_path / "THIRD-PARTY-LICENSES.md")
 
-        # 4. For OpenCode: copy dist/ (compiled JS) if it exists
+        # 4. Copy the one-command installer into currently supported public plugin repos.
+        if name in {"claude", "codex", "opencode"} and INSTALLER.exists():
+            shutil.copy2(INSTALLER, dist_path / "install.sh")
+
+        # 5. For OpenCode: copy dist/ (compiled JS) if it exists
         if name == "opencode":
             ts_dist = plugin_src / "dist"
             if ts_dist.exists():

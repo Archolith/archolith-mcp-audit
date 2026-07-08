@@ -5,14 +5,26 @@ plugins. Single source of truth for users evaluating which plugins to use.
 
 **Maturity legend:** `MVP` = code-complete, not yet runtime-verified against a
 live agent · `Beta` = runtime-verified, minor gaps · `Stable` = verified +
-published.
+published with a first-class install path.
 
 | Plugin | Dir | Maturity | Hook schema | Runtime-verified |
 |--------|-----|----------|-------------|------------------|
-| Claude Code | `plugins/claude/` | MVP | OK (package `hook_observer_standalone.py`) | No |
-| Codex | `plugins/codex/` | MVP | OK (fixed 2026-06-08) | No |
-| Gemini CLI | `plugins/gemini/` | MVP | OK (fixed 2026-06-08) | No |
-| OpenCode | `plugins/opencode/` | MVP | OK (fixed 2026-06-08) | No |
+| Claude Code | `plugins/claude/` | Beta | OK (package `hook_observer_standalone.py`) | Yes, WSL fresh install |
+| Codex | `plugins/codex/` | Beta | OK (fixed 2026-06-08) | Yes, WSL fresh install |
+| Gemini CLI | `plugins/gemini/` | Deprecated | OK (fixed 2026-06-08) | Skipped |
+| OpenCode | `plugins/opencode/` | Beta | OK (fixed 2026-06-08) | Yes, WSL fresh install |
+
+## One-command install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- claude
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- codex
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- opencode
+```
+
+The installer uses the native Claude marketplace path where available, and public GitHub clones
+plus config updates for Codex and OpenCode. It leaves runtime Python packages in managed venvs under
+`~/.archolith/venvs/`.
 
 ## Telemetry JSONL schema (all plugins)
 
@@ -36,23 +48,20 @@ adapters were corrected on 2026-06-08.
 ## Per-plugin notes
 
 ### Claude Code — `plugins/claude/`
-- **Install:** `python plugins/claude/install.py --path plugins/claude`
-  (global) or `--project <path>` (project-scoped).
+- **Install:** one-command installer or `claude plugin marketplace add Archolith/archolith-audit-plugin-claude --scope user` followed by `claude plugin install archolith-audit@archolith --scope user`.
 - **Hook:** PostToolUse → `hook_observer_standalone.py` (already canonical schema).
 - **Skill:** `/audit` at `plugins/claude/skills/audit/SKILL.md`.
 - **MCP env:** `MCP_AUDIT_ENABLED=1`, `PYTHONPATH=${CLAUDE_PLUGIN_DIR}`.
-- **Gaps:** `/audit` skill discovery and `install.py` both modes untested in a
-  live session (Plan B Phase 5).
+- **Gaps:** promote from Beta to Stable after public installer is exercised by an external user.
 
 ### Codex — `plugins/codex/`
-- **Install:** local path via Codex plugin config; MCP server runs
-  `python -m archolith_mcp_audit.mcp_server` with `PYTHONPATH=${CODEX_PLUGIN_DIR}`.
+- **Install:** one-command installer clones the public repo and registers `codex mcp add`.
 - **Hook:** `hooks/hooks.json` → `python ${CODEX_PLUGIN_DIR}/hook_observer_codex.py`
   (standalone, no package import — `PYTHONPATH` only needed by the MCP server,
   not the hook).
 - **Session ID:** Codex does not inject a session ID into hook env; falls back
   to an hour-based key `codex-YYYYMMDD-HH`.
-- **Gaps:** not runtime-verified (Plan B Phase 1).
+- **Gaps:** promote from Beta to Stable after public installer is exercised by an external user.
 
 ### Gemini CLI — `plugins/gemini/`
 - **Install:** local path via Gemini CLI extension config.
@@ -65,12 +74,10 @@ adapters were corrected on 2026-06-08.
   - Session-ID field availability unconfirmed; hour-based fallback in place.
 
 ### OpenCode — `plugins/opencode/`
-- **Install:** local path via `opencode.json` `plugins`, or publish
-  `@archolith/opencode-plugin` to npm.
+- **Install:** one-command installer clones the public repo and writes `opencode.json` `plugin` + `mcp` entries.
 - **Build:** `npm run build` (tsc) → `dist/index.js`. Rebuilt 2026-06-08.
 - **Hook:** in-process `tool.execute.after` event; `sessionId` from plugin context.
-- **Gaps:** not runtime-verified; Bun asset preservation untested; npm publish
-  pending (Plan B Phases 1, 4).
+- **Gaps:** npm publish pending; use the GitHub clone path until then.
 
 ## Known design decisions
 

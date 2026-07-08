@@ -29,6 +29,21 @@ python -m archolith_mcp_audit --refresh-schemas
 python -m archolith_mcp_audit --claude <path> --ci --max-server-share 20 --max-total-mcp-share 40
 ```
 
+## Agent Plugin Install
+
+For public agent installs, use the one-command installer from a Linux, macOS, or WSL shell:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- claude
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- codex
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- opencode
+```
+
+The installer clones public plugin repos under `~/.archolith/plugins/`, registers the agent MCP
+entry, and lets the plugin bootstrap its own isolated Python runtime under `~/.archolith/venvs/`.
+It does not install Python packages globally. Gemini CLI is intentionally omitted because that CLI
+is deprecated.
+
 ## In-Session MCP Tools
 
 When `MCP_AUDIT_ENABLED=1`, the audit server exposes four tools for real-time monitoring:

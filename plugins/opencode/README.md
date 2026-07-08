@@ -8,20 +8,32 @@ perfect file scoping.
 
 ## Install
 
-### Via npm (recommended)
+### One-command install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Archolith/archolith-mcp-audit/main/scripts/install.sh | bash -s -- opencode
+```
+
+The installer clones `https://github.com/Archolith/archolith-audit-plugin-opencode` to
+`~/.archolith/plugins/archolith-audit-plugin-opencode`, verifies `dist/index.js`, verifies the
+managed Python runtime, and writes the OpenCode plugin plus MCP config.
+
+### Manual install
+
+Clone the repo:
+
+```bash
+git clone https://github.com/Archolith/archolith-audit-plugin-opencode \
+  ~/.archolith/plugins/archolith-audit-plugin-opencode
+```
 
 Add to OpenCode config (`~/.config/opencode/opencode.json`):
 
 ```json
 {
-  "plugin": ["@archolith/archolith-audit-plugin-opencode"]
-}
-```
-
-Then add the MCP server:
-
-```json
-{
+  "plugin": [
+    "/home/you/.archolith/plugins/archolith-audit-plugin-opencode/dist/index.js"
+  ],
   "mcp": {
     "archolith-audit": {
       "type": "local",
@@ -29,14 +41,14 @@ Then add the MCP server:
       "command": ["python", "-m", "archolith_mcp_audit.bootstrap", "mcp", "--agent", "opencode"],
       "environment": {
         "MCP_AUDIT_ENABLED": "1",
-        "PYTHONPATH": "${OPENCODE_PLUGIN_DIR}"
+        "PYTHONPATH": "/home/you/.archolith/plugins/archolith-audit-plugin-opencode"
       }
     }
   }
 }
 ```
 
-OpenCode installs the TypeScript plugin at next startup. On first MCP startup,
+On first MCP startup,
 the plugin creates an isolated runtime under `~/.archolith/venvs/opencode-pyXY`
 and installs `requirements.txt` there. It does not mutate your global Python
 environment.
@@ -100,11 +112,7 @@ archolith_mcp_audit/          ← bundled core Python package
 
 ## Known Gaps
 
-1. **OPENCODE_PLUGIN_DIR env var**: Verify whether OpenCode provides a
-   `${OPENCODE_PLUGIN_DIR}` variable for `PYTHONPATH`. If not, use the absolute
-   package path shown above.
-2. **Bun package resolution**: Verify that Bun correctly installs npm packages that
-   include non-JS files (the bundled Python package).
+1. npm package publication is pending. Use the GitHub clone path until the npm package is published.
 
 ## Requirements
 

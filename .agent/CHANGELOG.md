@@ -1,5 +1,12 @@
 # Changelog — archolith-audit
 
+## 2026-07-08 — One-command plugin installer
+
+- Added `scripts/install.sh` as the public Unix/WSL one-command installer for Claude, Codex, and OpenCode.
+- Updated release packaging so supported standalone plugin bundles include the installer.
+- Updated root and plugin README install instructions to match the verified GitHub clone / Claude marketplace flows.
+- Updated plugin status to reflect WSL runtime verification and Gemini CLI deprecation.
+
 ## 2026-07-08 — Seamless plugin runtime bootstrap
 
 - Added a stdlib-only `archolith_mcp_audit.bootstrap` entry point for bundled plugins; it creates/reuses isolated per-agent venvs under `~/.archolith/venvs/` and installs `requirements.txt` there before launching the MCP server.
