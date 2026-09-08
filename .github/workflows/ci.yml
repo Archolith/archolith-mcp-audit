@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # ruff comes from the dev extra so its floor lives in pyproject.toml rather
+      # than here. pyproject also declares an explicit `[tool.ruff.lint] select`,
+      # so a new ruff release cannot silently widen what this gate enforces.
+      - name: Install (dev extras)
+        run: python -m pip install -e ".[dev]"
+      - name: Ruff check
+        run: python -m ruff check .
+
+  test:
+    name: tests (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12"]
+        # release.py does path and archive work that behaves differently on
+        # Windows; one leg guards that rather than a docs note.
+        include:
+          - os: windows-latest
+            python-version: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install (dev extras)
+        run: python -m pip install -e ".[dev]"
+
+      # Catches import-time breakage in the release tooling, which the unit
+      # suite exercises only indirectly.
+      - name: Release tooling smoke
+        run: |
+          python scripts/release.py --help
+          python scripts/release.py check
+
+      - name: Run test suite
+        run: python -m pytest -q
